@@ -1,6 +1,7 @@
 import JSZip from "jszip";
 import { extractMarkdown } from "./md";
 import { extractText } from "./txt";
+import { extractDocx } from "./docx";
 import { extensionOf, type Extracted } from "../types";
 
 export type ZipEntry = {
@@ -8,7 +9,7 @@ export type ZipEntry = {
   path: string;
   filename: string;
   extracted: Extracted;
-  sourceFormat: "md" | "txt";
+  sourceFormat: "md" | "txt" | "docx";
 };
 
 export type ZipResult = {
@@ -50,6 +51,13 @@ export async function extractZip(buffer: Buffer): Promise<ZipResult> {
         filename: baseName,
         extracted: extractText(innerBuf, baseName),
         sourceFormat: "txt",
+      });
+    } else if (ext === ".docx") {
+      entries.push({
+        path: treePath,
+        filename: baseName,
+        extracted: await extractDocx(innerBuf, baseName),
+        sourceFormat: "docx",
       });
     } else {
       // v1: skip non-text files inside zip. v1.5 will surface these as Tier 2 documents.

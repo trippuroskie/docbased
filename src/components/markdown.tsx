@@ -250,16 +250,24 @@ export function Markdown({
               {...props}
             />
           ),
-          img: ({ className, alt, ...props }) => (
-            <img
-              alt={alt ?? ""}
-              className={cn(
-                "my-4 max-w-full rounded-md border border-border",
-                className,
-              )}
-              {...props}
-            />
-          ),
+          img: ({ className, alt, src, ...props }) => {
+            // Drop images that have no resolvable src (e.g. bookmark/anchor
+            // artifacts from .docx). React errors on src="" otherwise.
+            const resolved =
+              typeof src === "string" && src.trim() !== "" ? src : null;
+            if (!resolved) return null;
+            return (
+              <img
+                src={resolved}
+                alt={alt ?? ""}
+                className={cn(
+                  "my-4 max-w-full rounded-md border border-border",
+                  className,
+                )}
+                {...props}
+              />
+            );
+          },
         }}
       >
         {rewritten}

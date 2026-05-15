@@ -45,6 +45,14 @@ export async function GET(
   const workspace =
     accessible.find((s) => s.id === doc.space_id)?.name ?? "(unknown)";
 
+  const rawContent = (doc.raw_content as string | null) ?? "";
+  const content = await rewriteAssetPaths(
+    admin,
+    doc.space_id as string,
+    doc.id as string,
+    rawContent,
+  );
+
   return NextResponse.json({
     document: {
       id: doc.id,
@@ -53,8 +61,41 @@ export async function GET(
       workspace,
       status: doc.processing_status,
       tags: doc.tags ?? [],
-      content: (doc.raw_content as string | null) ?? "",
+      content,
     },
+  });
+}
+
+const ASSET_PATH_RE = /(!\[[^\]]*\]\()(_assets\/[^\s)]+)(\))/g;
+const ASSET_URL_TTL_SECONDS = 60 * 60; // 1 hour
+
+type AdminClient = ReturnType<typeof createServiceClient>;
+
+async function rewriteAssetPaths(
+  admin: AdminClient,
+  spaceId: string,
+  documentId: string,
+  markdown: string,
+): Promise<string> {
+  const refs = new Set<string>();
+  for (const m of markdown.matchAll(ASSET_PATH_RE)) refs.add(m[2]);
+  if (refs.size === 0) return markdown;
+
+  const objectPaths = Array.from(refs).map((p) => `${spaceId}/${documentId}/${p}`);
+  const { data: signed } = await admin.storage
+    .from("originals")
+    .createSignedUrls(objectPaths, ASSET_URL_TTL_SECONDS);
+
+  const urlByRef = new Map<string, string>();
+  for (let i = 0; i < objectPaths.length; i++) {
+    const ref = Array.from(refs)[i];
+    const url = signed?.[i]?.signedUrl;
+    if (url) urlByRef.set(ref, url);
+  }
+
+  return markdown.replace(ASSET_PATH_RE, (_full, prefix, ref, suffix) => {
+    const url = urlByRef.get(ref);
+    return url ? `${prefix}${url}${suffix}` : "";
   });
 }
 

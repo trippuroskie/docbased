@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 
-const TIER_1_EXTS = new Set([".md", ".markdown", ".txt", ".zip"]);
+const TIER_1_EXTS = new Set([".md", ".markdown", ".txt", ".zip", ".docx"]);
 
 type UploadResult = {
   documentId: string;

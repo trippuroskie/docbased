@@ -5,12 +5,14 @@ import {
   extensionOf,
   sourceFormatFor,
   tierFor,
+  type Extracted,
   type Tier,
   type UploadFile,
 } from "./types";
 import { extractMarkdown } from "./extractors/md";
 import { extractText } from "./extractors/txt";
 import { extractZip } from "./extractors/zip";
+import { extractDocx } from "./extractors/docx";
 import { chunkMarkdown, type ChunkedPiece } from "./chunker";
 import { sha256 } from "./hash";
 import { extractWikilinkTargets } from "./wikilinks";
@@ -49,10 +51,12 @@ export async function ingestUpload(
     return ingestZip(file, opts);
   }
 
-  // .md / .markdown / .txt
+  // .md / .markdown / .txt / .docx
   const extracted =
     ext === ".txt"
       ? extractText(file.buffer, file.filename)
+      : ext === ".docx"
+      ? await extractDocx(file.buffer, file.filename)
       : extractMarkdown(file.buffer, file.filename);
 
   const treePath = stripExt(file.filename);
@@ -185,12 +189,7 @@ type IngestIndexedInput = {
   sourceFormat: string;
   /** When null, no original is uploaded (e.g. files inside a zip). */
   buffer: Buffer | null;
-  extracted: {
-    markdown: string;
-    frontmatter: Record<string, unknown>;
-    title: string;
-    tags: string[];
-  };
+  extracted: Extracted;
 };
 
 async function ingestIndexed(input: IngestIndexedInput): Promise<IngestResult> {
@@ -236,7 +235,7 @@ async function ingestIndexed(input: IngestIndexedInput): Promise<IngestResult> {
     const { error } = await admin.storage
       .from("originals")
       .upload(storagePath, input.buffer, {
-        contentType: "text/markdown",
+        contentType: contentTypeFor(input.sourceFormat),
         upsert: true,
       });
     if (error) throw new Error(`storage upload failed: ${error.message}`);
@@ -270,6 +269,23 @@ async function ingestIndexed(input: IngestIndexedInput): Promise<IngestResult> {
     .select("id")
     .single();
   if (docErr) throw new Error(`document upsert failed: ${docErr.message}`);
+
+  // Upload any inline images extracted from the source (e.g. .docx).
+  // Images are stored alongside the doc under "_assets/" and referenced by
+  // relative path in raw_content; the document GET handler rewrites those to
+  // signed URLs at read time.
+  for (const img of input.extracted.images ?? []) {
+    const objectPath = `${input.spaceId}/${doc.id}/${img.path}`;
+    const { error: imgErr } = await admin.storage
+      .from("originals")
+      .upload(objectPath, img.buffer, {
+        contentType: img.contentType,
+        upsert: true,
+      });
+    if (imgErr) {
+      console.warn(`image upload failed (${img.path}):`, imgErr.message);
+    }
+  }
 
   // Replace chunks atomically: delete then insert.
   await admin.from("chunks").delete().eq("document_id", doc.id);
@@ -331,6 +347,19 @@ async function embedInBatches(texts: string[]): Promise<number[][]> {
     out.push(...vecs);
   }
   return out;
+}
+
+function contentTypeFor(sourceFormat: string): string {
+  switch (sourceFormat) {
+    case "md":
+      return "text/markdown";
+    case "txt":
+      return "text/plain";
+    case "docx":
+      return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    default:
+      return "application/octet-stream";
+  }
 }
 
 function toVectorLiteral(v: number[]): string {
