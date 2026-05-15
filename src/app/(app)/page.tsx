@@ -53,6 +53,8 @@ export default async function HomePage({
       spaces={spaces}
       spacesWithTrees={spacesWithTrees}
       isAdmin={me?.is_admin ?? false}
+      userDisplayName={me?.display_name ?? null}
+      userEmail={me?.email ?? null}
       initialDocId={doc}
       initialQuery={q}
     />

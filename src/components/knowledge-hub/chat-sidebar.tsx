@@ -18,6 +18,7 @@ import {
   MessageSquare,
   FileSearch,
   Upload as UploadIcon,
+  Settings,
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
@@ -44,6 +45,16 @@ interface ChatSidebarProps {
   spaces: SpaceWithTree[];
   onSelectDoc: (docId: string) => void;
   isAdmin: boolean;
+  userDisplayName?: string | null;
+  userEmail?: string | null;
+}
+
+function initialsFor(name: string | null | undefined, email: string | null | undefined): string {
+  const source = (name && name.trim()) || (email && email.split("@")[0]) || "";
+  const parts = source.split(/[\s._-]+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[1][0]).toUpperCase();
 }
 
 function formatGroup(iso: string): string {
@@ -83,6 +94,8 @@ export function ChatSidebar({
   spaces,
   onSelectDoc,
   isAdmin,
+  userDisplayName,
+  userEmail,
 }: ChatSidebarProps) {
   const [activeTab, setActiveTab] = React.useState<string>("chats");
   const [chatSearch, setChatSearch] = React.useState("");
@@ -199,6 +212,19 @@ export function ChatSidebar({
             <UploadIcon className="size-4 text-muted-foreground" />
           </Link>
         )}
+        <div className="mt-auto">
+          <Link
+            href="/settings"
+            title={
+              userDisplayName || userEmail
+                ? `Settings · ${userDisplayName ?? userEmail}`
+                : "Settings"
+            }
+            className="flex items-center justify-center size-8 rounded-lg hover:bg-secondary transition-colors"
+          >
+            <Settings className="size-4 text-muted-foreground" />
+          </Link>
+        </div>
       </aside>
     );
   }
@@ -376,6 +402,29 @@ export function ChatSidebar({
           </div>
         </TabsContent>
       </Tabs>
+
+      <div className="border-t border-border p-2 shrink-0">
+        <Link
+          href="/settings"
+          className="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-secondary/50 transition-colors"
+          title="Account settings"
+        >
+          <span className="size-7 rounded-full bg-secondary text-[10px] font-semibold text-secondary-foreground flex items-center justify-center shrink-0">
+            {initialsFor(userDisplayName, userEmail)}
+          </span>
+          <div className="min-w-0 flex-1 leading-tight">
+            <p className="text-xs font-medium truncate">
+              {userDisplayName ?? userEmail ?? "Account"}
+            </p>
+            {userDisplayName && userEmail && (
+              <p className="text-[10px] text-muted-foreground truncate">
+                {userEmail}
+              </p>
+            )}
+          </div>
+          <Settings className="size-3.5 text-muted-foreground shrink-0" />
+        </Link>
+      </div>
     </aside>
   );
 }

@@ -1,10 +1,18 @@
 export type Tier = "indexed" | "metadata_only";
 
+export type ExtractedImage = {
+  /** Path used as the image src in the produced markdown, e.g. "_assets/img-1.png". */
+  path: string;
+  buffer: Buffer;
+  contentType: string;
+};
+
 export type Extracted = {
   markdown: string;
   frontmatter: Record<string, unknown>;
   title: string;
   tags: string[];
+  images?: ExtractedImage[];
 };
 
 export type UploadFile = {
@@ -13,7 +21,13 @@ export type UploadFile = {
   mimeType?: string;
 };
 
-export const TIER_1_EXTENSIONS = new Set([".md", ".markdown", ".txt", ".zip"]);
+export const TIER_1_EXTENSIONS = new Set([
+  ".md",
+  ".markdown",
+  ".txt",
+  ".zip",
+  ".docx",
+]);
 
 export function extensionOf(filename: string): string {
   const i = filename.lastIndexOf(".");

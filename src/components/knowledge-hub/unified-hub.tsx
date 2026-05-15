@@ -130,6 +130,8 @@ interface UnifiedHubProps {
   spaces: WorkspaceChatSpace[];
   spacesWithTrees: SpaceWithTree[];
   isAdmin: boolean;
+  userDisplayName?: string | null;
+  userEmail?: string | null;
   initialDocId?: string;
   initialQuery?: string;
 }
@@ -138,6 +140,8 @@ export function UnifiedHub({
   spaces,
   spacesWithTrees,
   isAdmin,
+  userDisplayName,
+  userEmail,
   initialDocId,
   initialQuery,
 }: UnifiedHubProps) {
@@ -461,6 +465,8 @@ export function UnifiedHub({
         spaces={spacesWithTrees}
         onSelectDoc={(id) => void loadDoc(id)}
         isAdmin={isAdmin}
+        userDisplayName={userDisplayName ?? null}
+        userEmail={userEmail ?? null}
       />
 
       <main className="flex-1 min-w-0 flex flex-col h-full min-h-0">
