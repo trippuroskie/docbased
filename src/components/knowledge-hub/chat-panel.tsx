@@ -99,10 +99,46 @@ function parseSse(raw: string): { event: string; data: string } | null {
 }
 
 export function ChatPanel({ spaces }: ChatPanelProps) {
+  const [enabledModels, setEnabledModels] = React.useState<string[]>([
+    ...CHAT_MODEL_ALLOWLIST,
+  ]);
   const [model, setModel] = React.useState<string>(CHAT_MODEL_ALLOWLIST[0]);
   const [selectedSpaceIds, setSelectedSpaceIds] = React.useState<string[]>(
     () => spaces.map((s) => s.id),
   );
+
+  // Pull the user's saved model preferences (chat picker list + default). If
+  // they haven't customized, the API returns empty arrays — fall back to the
+  // global allowlist for both list and default.
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const resp = await fetch("/api/settings");
+        if (!resp.ok) return;
+        const data = (await resp.json()) as {
+          chatModels: string[];
+          defaultChatModel: string | null;
+        };
+        if (cancelled) return;
+        const list =
+          data.chatModels.length > 0
+            ? data.chatModels
+            : [...CHAT_MODEL_ALLOWLIST];
+        setEnabledModels(list);
+        const def =
+          data.defaultChatModel && list.includes(data.defaultChatModel)
+            ? data.defaultChatModel
+            : list[0];
+        if (def) setModel(def);
+      } catch {
+        // keep the allowlist fallback
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const [conversationId, setConversationId] = React.useState<string | null>(
     null,
   );
@@ -385,15 +421,18 @@ export function ChatPanel({ spaces }: ChatPanelProps) {
               <span>{SHORT_NAMES[model] ?? model}</span>
               <ChevronDown className="size-3.5" />
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="min-w-[200px]">
-              {CHAT_MODEL_ALLOWLIST.map((m) => (
+            <DropdownMenuContent
+              align="end"
+              className="min-w-[200px] max-h-[400px] overflow-y-auto"
+            >
+              {enabledModels.map((m) => (
                 <DropdownMenuItem
                   key={m}
                   onClick={() => setModel(m)}
                   className="text-xs"
                 >
-                  <span className="flex-1">{SHORT_NAMES[m] ?? m}</span>
-                  {m === model && <Check className="size-3 ml-2" />}
+                  <span className="flex-1 truncate">{SHORT_NAMES[m] ?? m}</span>
+                  {m === model && <Check className="size-3 ml-2 shrink-0" />}
                 </DropdownMenuItem>
               ))}
             </DropdownMenuContent>

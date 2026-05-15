@@ -22,7 +22,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Markdown } from "@/components/markdown";
 import { cn } from "@/lib/utils";
-import { CHAT_MODEL_ALLOWLIST } from "@/lib/env";
 import { stripCitationTags } from "@/lib/chat";
 import { ChatSidebar, type ChatSummary } from "./chat-sidebar";
 import { ResizablePanel } from "./resizable-panel";
@@ -87,13 +86,23 @@ type DocState = {
   loading: boolean;
 };
 
+// Friendly labels for well-known model IDs. Anything not in this map falls
+// back to the trailing slug of the id (e.g. "moonshotai/kimi-k2.6" → "kimi-k2.6").
 const SHORT_NAMES: Record<string, string> = {
   "anthropic/claude-sonnet-4.5": "Claude Sonnet 4.5",
+  "anthropic/claude-sonnet-4.6": "Claude Sonnet 4.6",
   "anthropic/claude-opus-4": "Claude Opus 4",
+  "anthropic/claude-opus-4.7": "Claude Opus 4.7",
   "anthropic/claude-haiku-4.5": "Claude Haiku 4.5",
   "openai/gpt-5": "GPT-5",
   "google/gemini-2.5-pro": "Gemini 2.5 Pro",
 };
+
+function modelLabel(id: string): string {
+  if (SHORT_NAMES[id]) return SHORT_NAMES[id];
+  const slash = id.indexOf("/");
+  return slash >= 0 ? id.slice(slash + 1) : id;
+}
 
 const CITE_RE = /<cite\s+source=["'](\d+)["']\s*\/?>/g;
 
@@ -134,6 +143,8 @@ interface UnifiedHubProps {
   userEmail?: string | null;
   initialDocId?: string;
   initialQuery?: string;
+  enabledChatModels: string[];
+  defaultChatModel: string;
 }
 
 export function UnifiedHub({
@@ -144,6 +155,8 @@ export function UnifiedHub({
   userEmail,
   initialDocId,
   initialQuery,
+  enabledChatModels,
+  defaultChatModel,
 }: UnifiedHubProps) {
   // Layout
   const [sidebarCollapsed, setSidebarCollapsed] = React.useState(false);
@@ -152,8 +165,8 @@ export function UnifiedHub({
   // Document center pane
   const [doc, setDoc] = React.useState<DocState | null>(null);
 
-  // Chat right pane
-  const [model, setModel] = React.useState<string>(CHAT_MODEL_ALLOWLIST[0]);
+  // Chat right pane — model picker sourced from server-rendered user settings.
+  const [model, setModel] = React.useState<string>(defaultChatModel);
   const [selectedSpaceIds, setSelectedSpaceIds] = React.useState<string[]>(
     () => spaces.map((s) => s.id),
   );
@@ -491,11 +504,13 @@ export function UnifiedHub({
           setSelectedSpaceIds={setSelectedSpaceIds}
           model={model}
           setModel={setModel}
+          enabledChatModels={enabledChatModels}
           messages={messages}
           inputValue={inputValue}
           setInputValue={setInputValue}
           busy={busy}
           onSend={send}
+          onSelectDoc={(id) => void loadDoc(id)}
         />
       </ResizablePanel>
     </div>
@@ -581,11 +596,13 @@ interface InlineChatProps {
   setSelectedSpaceIds: React.Dispatch<React.SetStateAction<string[]>>;
   model: string;
   setModel: (m: string) => void;
+  enabledChatModels: string[];
   messages: Message[];
   inputValue: string;
   setInputValue: (v: string) => void;
   busy: boolean;
   onSend: (text: string) => void;
+  onSelectDoc: (id: string) => void;
 }
 
 function InlineChat({
@@ -594,11 +611,13 @@ function InlineChat({
   setSelectedSpaceIds,
   model,
   setModel,
+  enabledChatModels,
   messages,
   inputValue,
   setInputValue,
   busy,
   onSend,
+  onSelectDoc,
 }: InlineChatProps) {
   const scrollRef = React.useRef<HTMLDivElement | null>(null);
   React.useEffect(() => {
@@ -645,7 +664,12 @@ function InlineChat({
             </div>
           )}
           {messages.map((m) => (
-            <ChatMessageBlock key={m.id} message={m} spaces={spaces} />
+            <ChatMessageBlock
+              key={m.id}
+              message={m}
+              spaces={spaces}
+              onSelectDoc={onSelectDoc}
+            />
           ))}
         </div>
       </div>
@@ -705,18 +729,21 @@ function InlineChat({
             <div className="flex items-center justify-between gap-2 px-2 pb-2">
               <DropdownMenu>
                 <DropdownMenuTrigger className="flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors outline-none">
-                  <span>{SHORT_NAMES[model] ?? model}</span>
+                  <span>{modelLabel(model)}</span>
                   <ChevronDown className="size-3" />
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="min-w-[200px]">
-                  {CHAT_MODEL_ALLOWLIST.map((m) => (
+                <DropdownMenuContent
+                  align="start"
+                  className="min-w-[220px] max-h-[400px] overflow-y-auto"
+                >
+                  {enabledChatModels.map((m) => (
                     <DropdownMenuItem
                       key={m}
                       onClick={() => setModel(m)}
                       className="text-xs"
                     >
-                      <span className="flex-1">{SHORT_NAMES[m] ?? m}</span>
-                      {m === model && <Check className="size-3 ml-2" />}
+                      <span className="flex-1 truncate">{modelLabel(m)}</span>
+                      {m === model && <Check className="size-3 ml-2 shrink-0" />}
                     </DropdownMenuItem>
                   ))}
                 </DropdownMenuContent>
@@ -749,9 +776,11 @@ function InlineChat({
 function ChatMessageBlock({
   message,
   spaces,
+  onSelectDoc,
 }: {
   message: Message;
   spaces: WorkspaceChatSpace[];
+  onSelectDoc: (id: string) => void;
 }) {
   if (message.role === "user") {
     return (
@@ -800,10 +829,18 @@ function ChatMessageBlock({
           </span>
           <div className="space-y-1">
             {displayedSources.map((s) => (
+              // Keep an href for cmd/middle-click open-in-new-tab, but
+              // intercept plain clicks so we load the doc into the center
+              // pane without losing the chat conversation.
               <a
                 key={`${message.id}-${s.n}`}
                 href={`/?doc=${s.documentId}`}
-                className="flex items-start gap-2 p-2 rounded border border-border hover:bg-secondary/40 transition-colors group"
+                onClick={(e) => {
+                  if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+                  e.preventDefault();
+                  onSelectDoc(s.documentId);
+                }}
+                className="flex items-start gap-2 p-2 rounded border border-border hover:bg-secondary/40 transition-colors group cursor-pointer"
               >
                 <sup className="flex items-center justify-center size-4 rounded bg-primary/20 text-primary text-[10px] font-medium shrink-0 mt-0.5">
                   {s.n}

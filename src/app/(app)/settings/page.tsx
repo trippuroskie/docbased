@@ -1,15 +1,21 @@
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
-import { getCurrentUserRecord } from "@/lib/auth";
+import { getCurrentUserRecord, requireUser } from "@/lib/auth";
+import { getUserSettings } from "@/lib/settings";
 import { SignOutButton } from "./sign-out-button";
+import { ModelPreferences } from "./model-preferences";
 
 export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
-  const me = await getCurrentUserRecord();
+  const user = await requireUser();
+  const [me, settings] = await Promise.all([
+    getCurrentUserRecord(),
+    getUserSettings(user.id),
+  ]);
 
   return (
-    <main className="mx-auto w-full max-w-2xl space-y-6 p-6">
+    <main className="mx-auto w-full max-w-3xl space-y-6 p-6">
       <nav
         aria-label="Breadcrumb"
         className="flex items-center gap-1 text-xs text-muted-foreground"
@@ -39,6 +45,8 @@ export default async function SettingsPage() {
           <dd>{me?.is_admin ? "Admin" : "Member"}</dd>
         </dl>
       </section>
+
+      <ModelPreferences initial={settings} />
 
       {me?.is_admin && (
         <section className="rounded-lg border bg-card p-4 space-y-2">

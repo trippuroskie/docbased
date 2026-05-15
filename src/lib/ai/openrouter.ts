@@ -21,16 +21,22 @@ export function openrouter(): OpenAI {
   return _client;
 }
 
-export async function embed(texts: string[]): Promise<number[][]> {
+export async function embed(
+  texts: string[],
+  opts: { model?: string } = {},
+): Promise<number[][]> {
   if (texts.length === 0) return [];
   const resp = await openrouter().embeddings.create({
-    model: env.embeddingModel,
+    model: opts.model ?? env.embeddingModel,
     input: texts,
   });
   return resp.data.map((d) => d.embedding as number[]);
 }
 
-export async function embedOne(text: string): Promise<number[]> {
-  const [v] = await embed([text]);
+export async function embedOne(
+  text: string,
+  opts: { model?: string } = {},
+): Promise<number[]> {
+  const [v] = await embed([text], opts);
   return v;
 }

@@ -1,7 +1,12 @@
 import { createServiceClient } from "@/lib/supabase/server";
-import { getAccessibleSpaces } from "@/lib/auth";
+import { getAccessibleSpaces, getSession } from "@/lib/auth";
 import { embedOne } from "@/lib/ai/openrouter";
 import { env } from "@/lib/env";
+import {
+  effectiveEmbeddingModel,
+  effectiveRerankerModel,
+  getUserSettings,
+} from "@/lib/settings";
 
 export type SearchHit = {
   chunkId: string;
@@ -31,6 +36,17 @@ export async function search(
   const accessibleIds = accessible.map((s) => s.id);
   const nameById = new Map(accessible.map((s) => [s.id, s.name]));
 
+  // Resolve the caller's preferred embedding + reranker models. Embedding
+  // model must produce 1536-dim vectors to match the index — we trust the
+  // user's saved pick; mismatches surface as visible failures rather than
+  // silently degraded results.
+  const user = await getSession();
+  const settings = user
+    ? await getUserSettings(user.id)
+    : { chatModels: [], defaultChatModel: null, embeddingModel: null, rerankerModel: null };
+  const embeddingModel = effectiveEmbeddingModel(settings);
+  const rerankerModel = effectiveRerankerModel(settings);
+
   // Data queries: use service client since access is enforced above.
   const supabase = createServiceClient();
 
@@ -41,7 +57,7 @@ export async function search(
 
   if (scope.length === 0) return [];
 
-  const queryEmbedding = await embedOne(query);
+  const queryEmbedding = await embedOne(query, { model: embeddingModel });
 
   const { data: rows, error } = await supabase.rpc("hybrid_search", {
     query_text: query,
@@ -86,13 +102,17 @@ export async function search(
   });
 
   if (opts.rerank && env.rerankerEnabled && hits.length > 1) {
-    hits = await rerank(query, hits);
+    hits = await rerank(query, hits, rerankerModel);
   }
 
   return hits;
 }
 
-async function rerank(query: string, hits: SearchHit[]): Promise<SearchHit[]> {
+async function rerank(
+  query: string,
+  hits: SearchHit[],
+  model: string,
+): Promise<SearchHit[]> {
   try {
     // OpenRouter exposes Cohere reranker via the same endpoint family.
     // We use fetch directly because the SDK doesn't model rerank.
@@ -105,7 +125,7 @@ async function rerank(query: string, hits: SearchHit[]): Promise<SearchHit[]> {
         "X-Title": "Knowledge Hub",
       },
       body: JSON.stringify({
-        model: env.rerankerModel,
+        model,
         query,
         documents: hits.map((h) => h.content),
         top_n: Math.min(hits.length, 5),

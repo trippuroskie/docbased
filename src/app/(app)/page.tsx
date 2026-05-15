@@ -1,7 +1,16 @@
-import { getAccessibleSpaces, getCurrentUserRecord } from "@/lib/auth";
+import {
+  getAccessibleSpaces,
+  getCurrentUserRecord,
+  requireUser,
+} from "@/lib/auth";
 import { getSpaceTree } from "@/lib/tree";
 import { UnifiedHub } from "@/components/knowledge-hub/unified-hub";
 import type { SpaceWithTree } from "@/components/knowledge-hub/types";
+import {
+  effectiveChatModels,
+  effectiveDefaultChatModel,
+  getUserSettings,
+} from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
 
@@ -28,11 +37,16 @@ export default async function HomePage({
   searchParams: Promise<{ doc?: string; q?: string }>;
 }) {
   const { doc, q } = await searchParams;
-  const [me, accessible] = await Promise.all([
+  const user = await requireUser();
+  const [me, accessible, settings] = await Promise.all([
     getCurrentUserRecord(),
     getAccessibleSpaces(),
+    getUserSettings(user.id),
   ]);
   const trees = await Promise.all(accessible.map((s) => getSpaceTree(s.id)));
+
+  const enabledChatModels = effectiveChatModels(settings);
+  const defaultChatModel = effectiveDefaultChatModel(settings);
 
   const spacesWithTrees: SpaceWithTree[] = accessible.map((s, i) => ({
     id: s.id,
@@ -57,6 +71,8 @@ export default async function HomePage({
       userEmail={me?.email ?? null}
       initialDocId={doc}
       initialQuery={q}
+      enabledChatModels={enabledChatModels}
+      defaultChatModel={defaultChatModel}
     />
   );
 }
