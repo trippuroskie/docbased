@@ -164,6 +164,20 @@ export const chatUsage = pgTable(
   (t) => [primaryKey({ columns: [t.userId, t.day] })],
 );
 
+export const userSettings = pgTable("user_settings", {
+  userId: uuid("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  chatModels: text("chat_models")
+    .array()
+    .notNull()
+    .default(sql`'{}'::text[]`),
+  defaultChatModel: text("default_chat_model"),
+  embeddingModel: text("embedding_model"),
+  rerankerModel: text("reranker_model"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+});
+
 export type Document = typeof documents.$inferSelect;
 export type NewDocument = typeof documents.$inferInsert;
 export type Chunk = typeof chunks.$inferSelect;

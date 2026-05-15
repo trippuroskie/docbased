@@ -4,13 +4,14 @@ import type OpenAI from "openai";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { openrouter as getOpenRouter } from "@/lib/ai/openrouter";
 import { env, CHAT_MODEL_ALLOWLIST } from "@/lib/env";
-import {
-  SYSTEM_PROMPT,
-  isAllowedModel,
-  parseCitations,
-} from "@/lib/chat";
+import { SYSTEM_PROMPT, parseCitations } from "@/lib/chat";
 import { TOOL_SPECS, dispatchTool, type ToolContext } from "@/lib/ai/tools";
 import { getAccessibleSpaces } from "@/lib/auth";
+import {
+  effectiveChatModels,
+  effectiveDefaultChatModel,
+  getUserSettings,
+} from "@/lib/settings";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -38,8 +39,27 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   const body = Body.parse(await request.json());
-  const model = body.model && isAllowedModel(body.model) ? body.model : env.defaultChatModel;
-  if (!CHAT_MODEL_ALLOWLIST.includes(model as never)) {
+
+  // Authorize the model against the user's saved picker list, falling back
+  // to the env allowlist if they haven't customized it. Both lists are
+  // treated as trusted by the server — we never forward arbitrary user input
+  // to OpenRouter without validation.
+  const settings = await getUserSettings(user.id);
+  const userAllowed = effectiveChatModels(settings);
+  const requested = body.model;
+  const fallbackDefault = effectiveDefaultChatModel(settings);
+  let model: string;
+  if (requested && userAllowed.includes(requested)) {
+    model = requested;
+  } else if (
+    requested &&
+    (CHAT_MODEL_ALLOWLIST as readonly string[]).includes(requested)
+  ) {
+    // Legacy/global allowlist fallback for users with no saved selection.
+    model = requested;
+  } else if (!requested) {
+    model = fallbackDefault;
+  } else {
     return NextResponse.json({ error: "model_not_allowed" }, { status: 400 });
   }
 
