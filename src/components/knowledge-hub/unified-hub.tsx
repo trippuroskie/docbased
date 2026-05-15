@@ -11,6 +11,8 @@ import {
   X,
   Wrench,
   AlertCircle,
+  Layers,
+  Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -19,6 +21,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { Markdown } from "@/components/markdown";
 import { cn } from "@/lib/utils";
@@ -75,7 +78,7 @@ type StoredMessage = {
   created_at: string;
 };
 
-type DocState = {
+type DocTab = {
   id: string;
   title: string;
   path: string;
@@ -84,6 +87,7 @@ type DocState = {
   tags: string[];
   content: string;
   loading: boolean;
+  pinned: boolean;
 };
 
 // Friendly labels for well-known model IDs. Anything not in this map falls
@@ -162,8 +166,9 @@ export function UnifiedHub({
   const [sidebarCollapsed, setSidebarCollapsed] = React.useState(false);
   const [chatCollapsed, setChatCollapsed] = React.useState(false);
 
-  // Document center pane
-  const [doc, setDoc] = React.useState<DocState | null>(null);
+  // Document center pane — multi-tab (code-editor style).
+  const [tabs, setTabs] = React.useState<DocTab[]>([]);
+  const [activeTabId, setActiveTabId] = React.useState<string | null>(null);
 
   // Chat right pane — model picker sourced from server-rendered user settings.
   const [model, setModel] = React.useState<string>(defaultChatModel);
@@ -198,8 +203,10 @@ export function UnifiedHub({
     void refreshHistory();
   }, [refreshHistory]);
 
-  const loadDoc = React.useCallback(
-    async (docId: string) => {
+  // Build a placeholder tab from the tree metadata (so we can render the tab
+  // bar immediately) while the full doc content streams in via /api/documents.
+  const buildPlaceholder = React.useCallback(
+    (docId: string, pinned: boolean): DocTab => {
       let title = "Document";
       let path = "";
       let workspace = "";
@@ -212,7 +219,7 @@ export function UnifiedHub({
           break;
         }
       }
-      setDoc({
+      return {
         id: docId,
         title,
         path,
@@ -221,46 +228,128 @@ export function UnifiedHub({
         tags: [],
         content: "",
         loading: true,
-      });
-
-      try {
-        const resp = await fetch(`/api/documents/${docId}`);
-        if (!resp.ok) {
-          setDoc((p) =>
-            p
-              ? { ...p, loading: false, content: "Could not load document." }
-              : p,
-          );
-          return;
-        }
-        const data = (await resp.json()) as {
-          document: {
-            id: string;
-            title: string;
-            path: string;
-            workspace: string;
-            status: DocState["status"];
-            tags: string[];
-            content: string;
-          };
-        };
-        setDoc({ ...data.document, loading: false });
-      } catch {
-        setDoc((p) =>
-          p
-            ? { ...p, loading: false, content: "Could not load document." }
-            : p,
-        );
-      }
+        pinned,
+      };
     },
     [spacesWithTrees],
   );
 
-  // Initial doc from URL
+  const fetchDocInto = React.useCallback(async (docId: string) => {
+    try {
+      const resp = await fetch(`/api/documents/${docId}`);
+      if (!resp.ok) {
+        setTabs((prev) =>
+          prev.map((t) =>
+            t.id === docId
+              ? { ...t, loading: false, content: "Could not load document." }
+              : t,
+          ),
+        );
+        return;
+      }
+      const data = (await resp.json()) as {
+        document: {
+          id: string;
+          title: string;
+          path: string;
+          workspace: string;
+          status: DocTab["status"];
+          tags: string[];
+          content: string;
+        };
+      };
+      setTabs((prev) =>
+        prev.map((t) =>
+          t.id === docId
+            ? { ...t, ...data.document, loading: false }
+            : t,
+        ),
+      );
+    } catch {
+      setTabs((prev) =>
+        prev.map((t) =>
+          t.id === docId
+            ? { ...t, loading: false, content: "Could not load document." }
+            : t,
+        ),
+      );
+    }
+  }, []);
+
+  // Single-click / preview behavior: if the doc is already open, just focus it.
+  // Otherwise replace the existing preview tab (if any), else append a new
+  // preview tab. This matches VSCode's single-click-in-explorer behavior.
+  //
+  // We always fire the fetch unconditionally — fetchDocInto's setTabs updater
+  // filters by t.id, so it's a no-op when the tab no longer exists and a cheap
+  // refresh when it does. (Reading a flag set inside setTabs's updater after
+  // the call is unreliable: React only invokes the updater eagerly when the
+  // queue is empty, and StrictMode defers it entirely.)
+  const openDocPreview = React.useCallback(
+    (docId: string) => {
+      setTabs((prev) => {
+        if (prev.some((t) => t.id === docId)) return prev;
+        const placeholder = buildPlaceholder(docId, false);
+        const previewIdx = prev.findIndex((t) => !t.pinned);
+        if (previewIdx >= 0) {
+          const next = prev.slice();
+          next[previewIdx] = placeholder;
+          return next;
+        }
+        return [...prev, placeholder];
+      });
+      setActiveTabId(docId);
+      void fetchDocInto(docId);
+    },
+    [buildPlaceholder, fetchDocInto],
+  );
+
+  // Double-click / pin behavior: if the doc is open, mark it pinned. Else
+  // append a new pinned tab — never replace an existing preview tab.
+  const openDocPinned = React.useCallback(
+    (docId: string) => {
+      setTabs((prev) => {
+        const existing = prev.find((t) => t.id === docId);
+        if (existing) {
+          if (existing.pinned) return prev;
+          return prev.map((t) =>
+            t.id === docId ? { ...t, pinned: true } : t,
+          );
+        }
+        return [...prev, buildPlaceholder(docId, true)];
+      });
+      setActiveTabId(docId);
+      void fetchDocInto(docId);
+    },
+    [buildPlaceholder, fetchDocInto],
+  );
+
+  const closeTab = React.useCallback((docId: string) => {
+    setTabs((prev) => {
+      const idx = prev.findIndex((t) => t.id === docId);
+      if (idx < 0) return prev;
+      const next = prev.filter((t) => t.id !== docId);
+      setActiveTabId((cur) => {
+        if (cur !== docId) return cur;
+        if (next.length === 0) return null;
+        // Prefer the tab to the left, fall back to the next one.
+        const fallback = next[idx - 1] ?? next[idx] ?? next[next.length - 1];
+        return fallback.id;
+      });
+      return next;
+    });
+  }, []);
+
+  // Initial doc from URL — opens as a pinned tab so it survives further nav.
   React.useEffect(() => {
-    if (initialDocId && !doc) void loadDoc(initialDocId);
+    if (initialDocId) openDocPinned(initialDocId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialDocId]);
+
+  const activeDoc = React.useMemo(
+    () => tabs.find((t) => t.id === activeTabId) ?? null,
+    [tabs, activeTabId],
+  );
 
   const startNewChat = () => {
     setConversationId(null);
@@ -476,15 +565,27 @@ export function UnifiedHub({
         onDeleteConversation={(id) => void deleteConversation(id)}
         onNewChat={startNewChat}
         spaces={spacesWithTrees}
-        onSelectDoc={(id) => void loadDoc(id)}
+        onSelectDoc={openDocPreview}
+        onOpenDocInNewTab={openDocPinned}
         isAdmin={isAdmin}
         userDisplayName={userDisplayName ?? null}
         userEmail={userEmail ?? null}
       />
 
       <main className="flex-1 min-w-0 flex flex-col h-full min-h-0">
-        {doc ? (
-          <DocCenter doc={doc} onClose={() => setDoc(null)} />
+        {tabs.length > 0 ? (
+          <DocCenter
+            tabs={tabs}
+            activeTabId={activeTabId}
+            activeDoc={activeDoc}
+            onActivate={setActiveTabId}
+            onClose={closeTab}
+            onPin={(id) =>
+              setTabs((prev) =>
+                prev.map((t) => (t.id === id ? { ...t, pinned: true } : t)),
+              )
+            }
+          />
         ) : (
           <EmptyCenter />
         )}
@@ -510,7 +611,8 @@ export function UnifiedHub({
           setInputValue={setInputValue}
           busy={busy}
           onSend={send}
-          onSelectDoc={(id) => void loadDoc(id)}
+          onSelectDoc={openDocPreview}
+          onOpenDocInNewTab={openDocPinned}
         />
       </ResizablePanel>
     </div>
@@ -530,9 +632,9 @@ function EmptyCenter() {
           Knowledge Hub
         </h1>
         <p className="text-sm text-muted-foreground">
-          Pick a document from the sidebar to read it here, or ask anything in
-          the chat on the right. Switch the sidebar between Chats and Docs
-          using the tabs.
+          Click a document in the sidebar to preview it here. Double-click to
+          open it as a pinned tab so you can keep several open at once. Ask
+          anything in the chat on the right.
         </p>
       </div>
     </div>
@@ -540,51 +642,124 @@ function EmptyCenter() {
 }
 
 function DocCenter({
-  doc,
+  tabs,
+  activeTabId,
+  activeDoc,
+  onActivate,
   onClose,
+  onPin,
 }: {
-  doc: DocState;
-  onClose: () => void;
+  tabs: DocTab[];
+  activeTabId: string | null;
+  activeDoc: DocTab | null;
+  onActivate: (id: string) => void;
+  onClose: (id: string) => void;
+  onPin: (id: string) => void;
 }) {
   return (
     <>
-      <div className="border-b border-border px-6 py-3 shrink-0 flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2 min-w-0">
-            <FileText className="size-4 text-muted-foreground shrink-0" />
-            <h2 className="text-sm font-semibold truncate">{doc.title}</h2>
-          </div>
-          <p className="text-[11px] text-muted-foreground truncate mt-0.5">
-            {doc.workspace}
-            {doc.path ? ` › ${doc.path}` : ""}
-          </p>
-        </div>
-        <button
-          onClick={onClose}
-          title="Close document"
-          className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors shrink-0"
-        >
-          <X className="size-4" />
-        </button>
-      </div>
+      <TabStrip
+        tabs={tabs}
+        activeTabId={activeTabId}
+        onActivate={onActivate}
+        onClose={onClose}
+        onPin={onPin}
+      />
       <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar">
-        <article className="max-w-3xl mx-auto px-8 py-8">
-          {doc.loading ? (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="size-4 animate-spin" /> Loading…
-            </div>
-          ) : doc.status === "metadata_only" ? (
-            <div className="rounded-md border border-border bg-secondary/30 p-4 text-sm text-muted-foreground">
-              This file is stored as a binary and isn&apos;t indexed for
-              semantic search yet. Open it in the full hub view to download the
-              original.
-            </div>
-          ) : (
-            <Markdown source={doc.content} />
-          )}
-        </article>
+        {activeDoc ? (
+          <article className="max-w-3xl mx-auto px-8 py-8">
+            <h1 className="text-2xl font-semibold tracking-tight mb-2">
+              {activeDoc.title}
+            </h1>
+            <p className="text-xs text-muted-foreground mb-6 truncate">
+              {activeDoc.workspace}
+              {activeDoc.path ? ` › ${activeDoc.path}` : ""}
+            </p>
+            {activeDoc.loading ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="size-4 animate-spin" /> Loading…
+              </div>
+            ) : activeDoc.status === "metadata_only" ? (
+              <div className="rounded-md border border-border bg-secondary/30 p-4 text-sm text-muted-foreground">
+                This file is stored as a binary and isn&apos;t indexed for
+                semantic search yet. Open it in the full hub view to download
+                the original.
+              </div>
+            ) : (
+              <Markdown source={activeDoc.content} />
+            )}
+          </article>
+        ) : (
+          <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground p-8">
+            Pick a tab to view its document.
+          </div>
+        )}
       </div>
     </>
+  );
+}
+
+function TabStrip({
+  tabs,
+  activeTabId,
+  onActivate,
+  onClose,
+  onPin,
+}: {
+  tabs: DocTab[];
+  activeTabId: string | null;
+  onActivate: (id: string) => void;
+  onClose: (id: string) => void;
+  onPin: (id: string) => void;
+}) {
+  return (
+    <div className="flex items-stretch border-b border-border bg-secondary/20 overflow-x-auto no-scrollbar shrink-0">
+      {tabs.map((tab) => {
+        const active = tab.id === activeTabId;
+        return (
+          <div
+            key={tab.id}
+            onClick={() => onActivate(tab.id)}
+            onDoubleClick={() => onPin(tab.id)}
+            title={
+              tab.pinned
+                ? tab.title
+                : `${tab.title} — preview (double-click to pin)`
+            }
+            className={cn(
+              "group flex items-center gap-2 pl-3 pr-2 py-2 border-r border-border text-xs cursor-pointer select-none min-w-0 max-w-[220px] transition-colors",
+              active
+                ? "bg-background text-foreground border-b-2 border-b-primary -mb-px"
+                : "text-muted-foreground hover:text-foreground hover:bg-secondary/40",
+            )}
+          >
+            <FileText className="size-3.5 shrink-0" />
+            <span
+              className={cn(
+                "truncate flex-1",
+                !tab.pinned && "italic",
+              )}
+            >
+              {tab.title}
+            </span>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onClose(tab.id);
+              }}
+              className={cn(
+                "size-4 rounded flex items-center justify-center shrink-0 transition-opacity hover:bg-secondary",
+                active ? "opacity-80" : "opacity-0 group-hover:opacity-80",
+              )}
+              aria-label={`Close ${tab.title}`}
+            >
+              <X className="size-3" />
+            </button>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
@@ -603,6 +778,7 @@ interface InlineChatProps {
   busy: boolean;
   onSend: (text: string) => void;
   onSelectDoc: (id: string) => void;
+  onOpenDocInNewTab: (id: string) => void;
 }
 
 function InlineChat({
@@ -618,6 +794,7 @@ function InlineChat({
   busy,
   onSend,
   onSelectDoc,
+  onOpenDocInNewTab,
 }: InlineChatProps) {
   const scrollRef = React.useRef<HTMLDivElement | null>(null);
   React.useEffect(() => {
@@ -637,6 +814,16 @@ function InlineChat({
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
     );
   };
+
+  const workspaceLabel = (() => {
+    if (spaces.length === 0) return "No workspaces";
+    if (noneSelected) return "No workspace";
+    if (allSelected) return "All workspaces";
+    if (selectedSpaceIds.length === 1) {
+      return spaces.find((s) => s.id === selectedSpaceIds[0])?.name ?? "1 workspace";
+    }
+    return `${selectedSpaceIds.length} workspaces`;
+  })();
 
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -669,6 +856,7 @@ function InlineChat({
               message={m}
               spaces={spaces}
               onSelectDoc={onSelectDoc}
+              onOpenDocInNewTab={onOpenDocInNewTab}
             />
           ))}
         </div>
@@ -677,42 +865,6 @@ function InlineChat({
       <div className="border-t border-border p-3 space-y-1.5 shrink-0">
         <form onSubmit={onSubmit}>
           <div className="rounded-xl border border-border bg-secondary/30 focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/40 transition-colors">
-            {spaces.length > 1 && (
-              <div className="flex items-center gap-1 flex-wrap px-2.5 pt-2 pb-1.5">
-                <button
-                  type="button"
-                  onClick={toggleAll}
-                  className={cn(
-                    "inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium transition-colors border",
-                    allSelected
-                      ? "bg-primary/15 text-primary border-primary/30"
-                      : "bg-background text-muted-foreground border-border hover:text-foreground",
-                  )}
-                >
-                  {allSelected && <Check className="size-2.5" />}
-                  All
-                </button>
-                {spaces.map((s) => {
-                  const on = selectedSpaceIds.includes(s.id);
-                  return (
-                    <button
-                      key={s.id}
-                      type="button"
-                      onClick={() => toggleSpace(s.id)}
-                      className={cn(
-                        "inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium transition-colors border",
-                        on
-                          ? "bg-primary/15 text-primary border-primary/30"
-                          : "bg-background text-muted-foreground border-border hover:text-foreground",
-                      )}
-                    >
-                      <span className={cn("size-1.5 rounded-full", s.color)} />
-                      {s.name}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
             <Textarea
               placeholder={
                 noneSelected
@@ -727,39 +879,53 @@ function InlineChat({
               className="min-h-[64px] resize-none bg-transparent border-0 focus-visible:ring-0 focus-visible:border-0 text-sm"
             />
             <div className="flex items-center justify-between gap-2 px-2 pb-2">
-              <DropdownMenu>
-                <DropdownMenuTrigger className="flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors outline-none">
-                  <span>{modelLabel(model)}</span>
-                  <ChevronDown className="size-3" />
-                </DropdownMenuTrigger>
-                <DropdownMenuContent
-                  align="start"
-                  className="min-w-[220px] max-h-[400px] overflow-y-auto"
+              {/* Bottom-left: workspace selector */}
+              <WorkspacePicker
+                spaces={spaces}
+                selectedSpaceIds={selectedSpaceIds}
+                allSelected={allSelected}
+                label={workspaceLabel}
+                onToggleSpace={toggleSpace}
+                onToggleAll={toggleAll}
+              />
+
+              {/* Bottom-right: model selector + send button */}
+              <div className="flex items-center gap-1">
+                <DropdownMenu>
+                  <DropdownMenuTrigger className="flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors outline-none">
+                    <Zap className="size-3 text-primary" />
+                    <span>{modelLabel(model)}</span>
+                    <ChevronDown className="size-3" />
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    align="end"
+                    className="min-w-[220px] max-h-[400px] overflow-y-auto"
+                  >
+                    {enabledChatModels.map((m) => (
+                      <DropdownMenuItem
+                        key={m}
+                        onClick={() => setModel(m)}
+                        className="text-xs"
+                      >
+                        <span className="flex-1 truncate">{modelLabel(m)}</span>
+                        {m === model && <Check className="size-3 ml-2 shrink-0" />}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <Button
+                  type="submit"
+                  size="icon-sm"
+                  disabled={busy || !inputValue.trim() || noneSelected}
+                  className="size-7 bg-primary hover:bg-primary/90"
                 >
-                  {enabledChatModels.map((m) => (
-                    <DropdownMenuItem
-                      key={m}
-                      onClick={() => setModel(m)}
-                      className="text-xs"
-                    >
-                      <span className="flex-1 truncate">{modelLabel(m)}</span>
-                      {m === model && <Check className="size-3 ml-2 shrink-0" />}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-              <Button
-                type="submit"
-                size="icon-sm"
-                disabled={busy || !inputValue.trim() || noneSelected}
-                className="size-7 bg-primary hover:bg-primary/90"
-              >
-                {busy ? (
-                  <Loader2 className="size-3.5 animate-spin" />
-                ) : (
-                  <Send className="size-3.5" />
-                )}
-              </Button>
+                  {busy ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : (
+                    <Send className="size-3.5" />
+                  )}
+                </Button>
+              </div>
             </div>
           </div>
         </form>
@@ -771,16 +937,87 @@ function InlineChat({
   );
 }
 
+function WorkspacePicker({
+  spaces,
+  selectedSpaceIds,
+  allSelected,
+  label,
+  onToggleSpace,
+  onToggleAll,
+}: {
+  spaces: WorkspaceChatSpace[];
+  selectedSpaceIds: string[];
+  allSelected: boolean;
+  label: string;
+  onToggleSpace: (id: string) => void;
+  onToggleAll: () => void;
+}) {
+  if (spaces.length === 0) {
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] text-muted-foreground">
+        <Layers className="size-3" />
+        No workspaces
+      </span>
+    );
+  }
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger className="flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors outline-none max-w-[180px]">
+        <Layers className="size-3 text-primary" />
+        <span className="truncate">{label}</span>
+        <ChevronDown className="size-3 shrink-0" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="start"
+        className="min-w-[220px] max-h-[400px] overflow-y-auto"
+      >
+        <div className="px-1.5 py-1 text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
+          Scope chat to
+        </div>
+        <DropdownMenuItem
+          closeOnClick={false}
+          onClick={onToggleAll}
+          className="text-xs"
+        >
+          <span className="flex-1">All workspaces</span>
+          {allSelected && <Check className="size-3 ml-2 shrink-0" />}
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        {spaces.map((s) => {
+          const on = selectedSpaceIds.includes(s.id);
+          return (
+            <DropdownMenuItem
+              key={s.id}
+              closeOnClick={false}
+              onClick={() => onToggleSpace(s.id)}
+              className="text-xs"
+            >
+              <span
+                className={cn("size-2 rounded-full shrink-0 mr-2", s.color)}
+              />
+              <span className="flex-1 truncate">{s.name}</span>
+              {on && <Check className="size-3 ml-2 shrink-0" />}
+            </DropdownMenuItem>
+          );
+        })}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 // ---------- Message + step rendering ----------
 
 function ChatMessageBlock({
   message,
   spaces,
   onSelectDoc,
+  onOpenDocInNewTab,
 }: {
   message: Message;
   spaces: WorkspaceChatSpace[];
   onSelectDoc: (id: string) => void;
+  onOpenDocInNewTab: (id: string) => void;
 }) {
   if (message.role === "user") {
     return (
@@ -830,8 +1067,8 @@ function ChatMessageBlock({
           <div className="space-y-1">
             {displayedSources.map((s) => (
               // Keep an href for cmd/middle-click open-in-new-tab, but
-              // intercept plain clicks so we load the doc into the center
-              // pane without losing the chat conversation.
+              // intercept plain clicks (preview) and double-clicks (pin) so
+              // sources open in the center pane without losing the chat.
               <a
                 key={`${message.id}-${s.n}`}
                 href={`/?doc=${s.documentId}`}
@@ -839,6 +1076,10 @@ function ChatMessageBlock({
                   if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
                   e.preventDefault();
                   onSelectDoc(s.documentId);
+                }}
+                onDoubleClick={(e) => {
+                  e.preventDefault();
+                  onOpenDocInNewTab(s.documentId);
                 }}
                 className="flex items-start gap-2 p-2 rounded border border-border hover:bg-secondary/40 transition-colors group cursor-pointer"
               >

@@ -44,6 +44,7 @@ interface ChatSidebarProps {
   onNewChat: () => void;
   spaces: SpaceWithTree[];
   onSelectDoc: (docId: string) => void;
+  onOpenDocInNewTab: (docId: string) => void;
   isAdmin: boolean;
   userDisplayName?: string | null;
   userEmail?: string | null;
@@ -93,6 +94,7 @@ export function ChatSidebar({
   onNewChat,
   spaces,
   onSelectDoc,
+  onOpenDocInNewTab,
   isAdmin,
   userDisplayName,
   userEmail,
@@ -392,6 +394,7 @@ export function ChatSidebar({
                           toggleFolder={toggleFolder}
                           forceOpen={docSearch.trim().length > 0}
                           onSelectDoc={onSelectDoc}
+                          onOpenDocInNewTab={onOpenDocInNewTab}
                         />
                       ))}
                     </div>
@@ -479,6 +482,7 @@ function DocTreeNode({
   toggleFolder,
   forceOpen,
   onSelectDoc,
+  onOpenDocInNewTab,
 }: {
   node: TreeNode;
   spaceId: string;
@@ -486,11 +490,14 @@ function DocTreeNode({
   toggleFolder: (key: string) => void;
   forceOpen: boolean;
   onSelectDoc: (docId: string) => void;
+  onOpenDocInNewTab: (docId: string) => void;
 }) {
   if (node.type === "doc") {
     return (
       <button
         onClick={() => onSelectDoc(node.id)}
+        onDoubleClick={() => onOpenDocInNewTab(node.id)}
+        title="Click to preview · Double-click to open in a new tab"
         className="w-full flex items-center gap-2 px-2 py-1 text-xs text-muted-foreground hover:text-foreground hover:bg-secondary/50 rounded-md transition-colors ml-2"
       >
         <FileText className="size-3 shrink-0" />
@@ -531,6 +538,7 @@ function DocTreeNode({
               toggleFolder={toggleFolder}
               forceOpen={forceOpen}
               onSelectDoc={onSelectDoc}
+              onOpenDocInNewTab={onOpenDocInNewTab}
             />
           ))}
         </div>

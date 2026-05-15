@@ -474,6 +474,7 @@ export function WorkspaceChat({
         onNewChat={startNewChat}
         spaces={spacesWithTrees}
         onSelectDoc={(id) => void openDocPreview(id)}
+        onOpenDocInNewTab={(id) => void openDocPreview(id)}
         isAdmin={isAdmin}
       />
 
