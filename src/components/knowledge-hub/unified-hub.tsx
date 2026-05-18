@@ -876,8 +876,11 @@ function InlineChat({
 
   return (
     <div className="w-full border-l border-border flex flex-col h-full min-h-0 bg-background">
+      <div className="h-12 px-4 flex items-center justify-center shrink-0">
+        <span className="text-base font-semibold tracking-tight">Ask</span>
+      </div>
       <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar" ref={scrollRef}>
-        <div className="pt-12 px-4 pb-4 space-y-5">
+        <div className="px-4 pb-4 space-y-5">
           {messages.length === 0 && (
             <div className="text-center text-xs text-muted-foreground px-2 py-6">
               Ask a question about your workspaces. Answers cite their sources

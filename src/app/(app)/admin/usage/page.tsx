@@ -61,6 +61,7 @@ export default async function UsagePage() {
           className="mt-3"
           size="sm"
           variant="outline"
+          nativeButton={false}
           render={
             <a
               href="https://openrouter.ai/activity"

@@ -427,6 +427,15 @@ export function ChatSidebar({
         >
           <SquarePen className="size-4 text-muted-foreground" />
         </Button>
+        {isAdmin && (
+          <Link
+            href="/admin/upload"
+            title="Upload documents"
+            className="flex items-center justify-center size-8 rounded-lg hover:bg-secondary transition-colors"
+          >
+            <UploadIcon className="size-4 text-muted-foreground" />
+          </Link>
+        )}
         <div className="h-px w-6 bg-border my-1" />
         <Button
           variant="ghost"
@@ -452,15 +461,6 @@ export function ChatSidebar({
         >
           <MessageSquare className="size-4 text-muted-foreground" />
         </Button>
-        {isAdmin && (
-          <Link
-            href="/admin/upload"
-            title="Upload documents"
-            className="flex items-center justify-center size-8 rounded-lg hover:bg-secondary transition-colors"
-          >
-            <UploadIcon className="size-4 text-muted-foreground" />
-          </Link>
-        )}
         <div className="mt-auto">
           <Link
             href="/settings"
@@ -508,25 +508,35 @@ export function ChatSidebar({
         </Button>
       </div>
 
-      <div className="px-3 pb-3 shrink-0 flex flex-col gap-2">
-        <Button
-          onClick={onNewChat}
-          className="w-full h-8 gap-1.5 justify-center bg-secondary text-secondary-foreground hover:bg-secondary/80"
-        >
-          <SquarePen className="size-3.5" />
-          New chat
-        </Button>
+      <div className="px-2 pb-2 shrink-0 flex flex-col gap-0.5">
         <button
           type="button"
           onClick={() => setSearchOpen(true)}
-          className="group flex items-center gap-2 h-8 w-full rounded-lg bg-secondary/40 hover:bg-secondary/70 px-2.5 text-xs text-muted-foreground transition-colors"
+          className="group flex items-center gap-2 h-8 w-full rounded-md px-2 text-sm text-foreground hover:bg-secondary/60 transition-colors"
         >
-          <Search className="size-3.5 shrink-0" />
-          <span className="flex-1 text-left">Search…</span>
+          <Search className="size-4 shrink-0 text-muted-foreground" />
+          <span className="flex-1 text-left">Search</span>
           <kbd className="hidden sm:inline-flex items-center gap-0.5 rounded border border-border bg-background/40 px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground">
             ⌘K
           </kbd>
         </button>
+        <button
+          type="button"
+          onClick={onNewChat}
+          className="flex items-center gap-2 h-8 w-full rounded-md px-2 text-sm text-foreground hover:bg-secondary/60 transition-colors"
+        >
+          <SquarePen className="size-4 shrink-0 text-muted-foreground" />
+          <span className="flex-1 text-left">New chat</span>
+        </button>
+        {isAdmin && (
+          <Link
+            href="/admin/upload"
+            className="flex items-center gap-2 h-8 w-full rounded-md px-2 text-sm text-foreground hover:bg-secondary/60 transition-colors"
+          >
+            <UploadIcon className="size-4 shrink-0 text-muted-foreground" />
+            <span className="flex-1 text-left">Upload documents</span>
+          </Link>
+        )}
       </div>
 
       <Tabs
@@ -585,15 +595,6 @@ export function ChatSidebar({
           value="docs"
           className="flex-1 min-h-0 flex flex-col gap-2 mt-0 data-[state=inactive]:hidden"
         >
-          {isAdmin && (
-            <Link
-              href="/admin/upload"
-              className="flex h-8 w-full items-center justify-center gap-1.5 rounded-lg bg-secondary text-xs font-medium text-secondary-foreground hover:bg-secondary/80 transition-colors shrink-0"
-            >
-              <UploadIcon className="size-3.5" />
-              Upload documents
-            </Link>
-          )}
           <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar -mx-1 px-1">
             {spaces.length === 0 && (
               <p className="text-xs text-muted-foreground px-2 py-2">

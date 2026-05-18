@@ -102,7 +102,12 @@ export default async function DocPage({
             <h1 className="text-2xl font-semibold tracking-tight">{doc.title}</h1>
             <div className="flex items-center gap-1">
               {canEdit && doc.processing_status === "indexed" && (
-                <Button size="sm" variant="outline" render={<Link href={`/doc/${doc.id}/edit`} />}>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  nativeButton={false}
+                  render={<Link href={`/doc/${doc.id}/edit`} />}
+                >
                   <Pencil className="mr-1 h-3.5 w-3.5" /> Edit
                 </Button>
               )}
@@ -110,6 +115,7 @@ export default async function DocPage({
                 <Button
                   size="sm"
                   variant="outline"
+                  nativeButton={false}
                   render={<a href={downloadUrl} download={doc.original_filename} />}
                 >
                   <Download className="mr-1 h-3.5 w-3.5" /> Original
@@ -196,6 +202,7 @@ function MetadataOnlyCard({
         <Button
           className="mt-4"
           size="sm"
+          nativeButton={false}
           render={<a href={downloadUrl} download={filename} />}
         >
           <Download className="mr-1 h-3.5 w-3.5" /> Download original
