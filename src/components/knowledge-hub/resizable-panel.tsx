@@ -31,57 +31,59 @@ export function ResizablePanel({
   const [width, setWidth] = useState(defaultWidth)
   const [isResizing, setIsResizing] = useState(false)
   const panelRef = useRef<HTMLDivElement>(null)
-
-  // Store width before collapse to restore it
-  const previousWidthRef = useRef(defaultWidth)
-
-  // Save width when not collapsed
-  useEffect(() => {
-    if (!isCollapsed) {
-      previousWidthRef.current = width
-    }
-  }, [width, isCollapsed])
+  // Track edge position when drag starts so we don't restyle/recompute mid-frame.
+  const dragAnchorRef = useRef(0)
+  const latestWidthRef = useRef(defaultWidth)
+  const rafRef = useRef<number | null>(null)
 
   const startResizing = useCallback((e: React.MouseEvent) => {
-    if (isCollapsed) return
+    if (isCollapsed || !panelRef.current) return
     e.preventDefault()
+    const rect = panelRef.current.getBoundingClientRect()
+    dragAnchorRef.current = position === "right" ? rect.right : rect.left
+    latestWidthRef.current = width
     setIsResizing(true)
-  }, [isCollapsed])
+  }, [isCollapsed, position, width])
 
   const stopResizing = useCallback(() => {
+    if (rafRef.current !== null) {
+      cancelAnimationFrame(rafRef.current)
+      rafRef.current = null
+    }
+    // Commit the final width to React state once at the end of the drag.
+    setWidth(latestWidthRef.current)
     setIsResizing(false)
   }, [])
 
   const resize = useCallback(
     (e: MouseEvent) => {
-      if (!isResizing || !panelRef.current) return
+      if (!panelRef.current) return
 
-      const rect = panelRef.current.getBoundingClientRect()
-      let newWidth: number
-
-      if (position === "right") {
-        // For right panel, resize by dragging left edge
-        newWidth = rect.right - e.clientX
-      } else {
-        // For left panel, resize by dragging right edge
-        newWidth = e.clientX - rect.left
-      }
-
-      // Clamp to min/max
+      const anchor = dragAnchorRef.current
+      let newWidth =
+        position === "right" ? anchor - e.clientX : e.clientX - anchor
       newWidth = Math.max(minWidth, Math.min(maxWidth, newWidth))
-      setWidth(newWidth)
+      latestWidthRef.current = newWidth
+
+      // Drive width updates via rAF + direct style write to avoid React re-renders per mousemove.
+      if (rafRef.current === null) {
+        rafRef.current = requestAnimationFrame(() => {
+          rafRef.current = null
+          if (panelRef.current) {
+            panelRef.current.style.width = `${latestWidthRef.current}px`
+          }
+        })
+      }
     },
-    [isResizing, minWidth, maxWidth, position]
+    [minWidth, maxWidth, position]
   )
 
   useEffect(() => {
-    if (isResizing) {
-      window.addEventListener("mousemove", resize)
-      window.addEventListener("mouseup", stopResizing)
-      // Prevent text selection while resizing
-      document.body.style.cursor = "col-resize"
-      document.body.style.userSelect = "none"
-    }
+    if (!isResizing) return
+    window.addEventListener("mousemove", resize)
+    window.addEventListener("mouseup", stopResizing)
+    document.body.style.cursor = "col-resize"
+    document.body.style.userSelect = "none"
 
     return () => {
       window.removeEventListener("mousemove", resize)
@@ -97,7 +99,9 @@ export function ResizablePanel({
     <div
       ref={panelRef}
       className={cn(
-        "relative flex-shrink-0 transition-all duration-200",
+        "relative flex-shrink-0",
+        // Only animate width when collapsing/expanding — never during drag.
+        !isResizing && "transition-[width] duration-200 ease-out",
         className
       )}
       style={{ width: currentWidth }}
