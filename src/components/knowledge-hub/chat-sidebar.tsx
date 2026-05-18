@@ -2,6 +2,8 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import {
   Search,
   ChevronRight,
@@ -19,10 +21,28 @@ import {
   FileSearch,
   Upload as UploadIcon,
   Settings,
+  SquareArrowOutUpRight,
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import {
+  ContextMenu,
+  ContextMenuTrigger,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+} from "@/components/ui/context-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import type { TreeNode } from "@/lib/tree";
 import type { SpaceWithTree } from "./types";
@@ -83,6 +103,16 @@ function pathToDoc(nodes: TreeNode[], docId: string, trail: string[] = []): stri
   return null;
 }
 
+type DocDragPayload = {
+  docId: string;
+  spaceId: string;
+  currentPath: string;
+};
+
+type PendingDelete =
+  | { kind: "doc"; docId: string; title: string }
+  | { kind: "folder"; spaceId: string; folderPath: string };
+
 export function ChatSidebar({
   isCollapsed,
   onToggleCollapse,
@@ -99,6 +129,7 @@ export function ChatSidebar({
   userDisplayName,
   userEmail,
 }: ChatSidebarProps) {
+  const router = useRouter();
   const [activeTab, setActiveTab] = React.useState<string>("docs");
   const [chatSearch, setChatSearch] = React.useState("");
   const [docSearch, setDocSearch] = React.useState("");
@@ -107,6 +138,98 @@ export function ChatSidebar({
   );
   const [expandedFolders, setExpandedFolders] = React.useState<Set<string>>(
     new Set(),
+  );
+  // Tracks the doc currently being dragged. Used by drop targets to decide
+  // whether to show a "valid drop" indicator (only same-space drops are
+  // allowed in v1; cross-space moves would require a different endpoint).
+  const [drag, setDrag] = React.useState<DocDragPayload | null>(null);
+  const [pendingDelete, setPendingDelete] =
+    React.useState<PendingDelete | null>(null);
+  const [deleting, setDeleting] = React.useState(false);
+
+  const deleteDoc = React.useCallback(
+    async (docId: string, title: string) => {
+      const resp = await fetch(`/api/documents/${docId}`, { method: "DELETE" });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        toast.error(`Delete failed: ${err.error ?? resp.statusText}`);
+        return false;
+      }
+      toast.success(`Deleted "${title}".`);
+      return true;
+    },
+    [],
+  );
+
+  const deleteFolder = React.useCallback(
+    async (spaceId: string, folderPath: string) => {
+      const resp = await fetch(`/api/spaces/${spaceId}/folders/delete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ folderPath }),
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        toast.error(`Delete failed: ${err.error ?? resp.statusText}`);
+        return false;
+      }
+      const data = (await resp.json()) as { count: number };
+      toast.success(
+        data.count === 0
+          ? `Folder "${folderPath}" was already empty.`
+          : `Deleted ${data.count} document${data.count === 1 ? "" : "s"} from "${folderPath}".`,
+      );
+      return true;
+    },
+    [],
+  );
+
+  const confirmDelete = React.useCallback(async () => {
+    if (!pendingDelete || deleting) return;
+    setDeleting(true);
+    let ok = false;
+    if (pendingDelete.kind === "doc") {
+      ok = await deleteDoc(pendingDelete.docId, pendingDelete.title);
+    } else {
+      ok = await deleteFolder(pendingDelete.spaceId, pendingDelete.folderPath);
+    }
+    setDeleting(false);
+    if (ok) {
+      setPendingDelete(null);
+      router.refresh();
+    }
+  }, [pendingDelete, deleting, deleteDoc, deleteFolder, router]);
+
+  const moveDoc = React.useCallback(
+    async (payload: DocDragPayload, targetFolder: string) => {
+      const filename =
+        payload.currentPath.split("/").filter(Boolean).pop() ?? "";
+      if (!filename) return;
+      const newPath = targetFolder ? `${targetFolder}/${filename}` : filename;
+      if (newPath === payload.currentPath) return;
+
+      const resp = await fetch(`/api/documents/${payload.docId}/move`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ newPath }),
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        if (err.error === "path_conflict") {
+          toast.error(
+            "A document with that name already exists in the target folder.",
+          );
+        } else if (err.error === "invalid_path") {
+          toast.error("That destination isn't a valid folder path.");
+        } else {
+          toast.error(`Move failed: ${err.error ?? resp.statusText}`);
+        }
+        return;
+      }
+      toast.success(`Moved to ${targetFolder || "workspace root"}.`);
+      router.refresh();
+    },
+    [router],
   );
 
   const toggleSpace = (id: string) => {
@@ -232,6 +355,7 @@ export function ChatSidebar({
   }
 
   return (
+    <>
     <aside className="w-[280px] border-r border-border flex flex-col shrink-0 h-full min-h-0">
       {/* Header */}
       <div className="p-3 flex items-center justify-between shrink-0">
@@ -360,24 +484,23 @@ export function ChatSidebar({
             {filteredSpaces.map((space) => {
               const open =
                 expandedSpaces.has(space.id) || docSearch.trim().length > 0;
+              const isDropTarget = drag !== null && drag.spaceId === space.id;
               return (
                 <div key={space.id} className="mb-2">
-                  <button
-                    onClick={() => !docSearch.trim() && toggleSpace(space.id)}
-                    className="w-full flex items-center gap-2 px-2 py-1.5 text-sm font-medium hover:bg-secondary/50 rounded-md transition-colors"
-                  >
-                    {open ? (
-                      <ChevronDown className="size-3.5 text-muted-foreground" />
-                    ) : (
-                      <ChevronRight className="size-3.5 text-muted-foreground" />
-                    )}
-                    <span
-                      className={cn("size-2 rounded-full shrink-0", space.color)}
-                    />
-                    <span className="truncate flex-1 text-left">
-                      {space.name}
-                    </span>
-                  </button>
+                  <SpaceHeaderRow
+                    space={space}
+                    open={open}
+                    onToggle={() =>
+                      !docSearch.trim() && toggleSpace(space.id)
+                    }
+                    canAcceptDrop={isDropTarget}
+                    onDropDoc={() => {
+                      if (drag && drag.spaceId === space.id) {
+                        void moveDoc(drag, "");
+                      }
+                      setDrag(null);
+                    }}
+                  />
                   {open && (
                     <div className="ml-4 border-l border-border/50">
                       {space.tree.length === 0 && (
@@ -395,6 +518,24 @@ export function ChatSidebar({
                           forceOpen={docSearch.trim().length > 0}
                           onSelectDoc={onSelectDoc}
                           onOpenDocInNewTab={onOpenDocInNewTab}
+                          drag={drag}
+                          setDrag={setDrag}
+                          onDropOnFolder={(folderPath) => {
+                            if (drag && drag.spaceId === space.id) {
+                              void moveDoc(drag, folderPath);
+                            }
+                            setDrag(null);
+                          }}
+                          onRequestDeleteDoc={(docId, title) =>
+                            setPendingDelete({ kind: "doc", docId, title })
+                          }
+                          onRequestDeleteFolder={(folderPath) =>
+                            setPendingDelete({
+                              kind: "folder",
+                              spaceId: space.id,
+                              folderPath,
+                            })
+                          }
                         />
                       ))}
                     </div>
@@ -429,6 +570,43 @@ export function ChatSidebar({
         </Link>
       </div>
     </aside>
+    <AlertDialog
+      open={pendingDelete !== null}
+      onOpenChange={(open) => {
+        if (!open && !deleting) setPendingDelete(null);
+      }}
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>
+            {pendingDelete?.kind === "folder"
+              ? "Delete folder?"
+              : "Delete document?"}
+          </AlertDialogTitle>
+          <AlertDialogDescription>
+            {pendingDelete?.kind === "folder"
+              ? `Every document under "${pendingDelete.folderPath}" will be removed from the workspace. This cannot be undone from the UI.`
+              : pendingDelete?.kind === "doc"
+                ? `"${pendingDelete.title}" will be removed from the workspace. This cannot be undone from the UI.`
+                : ""}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            variant="destructive"
+            disabled={deleting}
+            onClick={(e) => {
+              e.preventDefault();
+              void confirmDelete();
+            }}
+          >
+            {deleting ? "Deleting…" : "Delete"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }
 
@@ -475,6 +653,67 @@ function ConversationRow({
   );
 }
 
+function SpaceHeaderRow({
+  space,
+  open,
+  onToggle,
+  canAcceptDrop,
+  onDropDoc,
+}: {
+  space: SpaceWithTree;
+  open: boolean;
+  onToggle: () => void;
+  canAcceptDrop: boolean;
+  onDropDoc: () => void;
+}) {
+  const [over, setOver] = React.useState(false);
+  return (
+    <button
+      onClick={onToggle}
+      onDragOver={(e) => {
+        if (!canAcceptDrop) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        if (!over) setOver(true);
+      }}
+      onDragLeave={() => setOver(false)}
+      onDrop={(e) => {
+        if (!canAcceptDrop) return;
+        e.preventDefault();
+        setOver(false);
+        onDropDoc();
+      }}
+      className={cn(
+        "w-full flex items-center gap-2 px-2 py-1.5 text-sm font-medium hover:bg-secondary/50 rounded-md transition-colors",
+        over && "ring-1 ring-primary bg-primary/10",
+      )}
+    >
+      {open ? (
+        <ChevronDown className="size-3.5 text-muted-foreground" />
+      ) : (
+        <ChevronRight className="size-3.5 text-muted-foreground" />
+      )}
+      <span className={cn("size-2 rounded-full shrink-0", space.color)} />
+      <span className="truncate flex-1 text-left">{space.name}</span>
+    </button>
+  );
+}
+
+type DocTreeNodeProps = {
+  node: TreeNode;
+  spaceId: string;
+  expandedFolders: Set<string>;
+  toggleFolder: (key: string) => void;
+  forceOpen: boolean;
+  onSelectDoc: (docId: string) => void;
+  onOpenDocInNewTab: (docId: string) => void;
+  drag: DocDragPayload | null;
+  setDrag: (d: DocDragPayload | null) => void;
+  onDropOnFolder: (folderPath: string) => void;
+  onRequestDeleteDoc: (docId: string, title: string) => void;
+  onRequestDeleteFolder: (folderPath: string) => void;
+};
+
 function DocTreeNode({
   node,
   spaceId,
@@ -483,50 +722,83 @@ function DocTreeNode({
   forceOpen,
   onSelectDoc,
   onOpenDocInNewTab,
-}: {
-  node: TreeNode;
-  spaceId: string;
-  expandedFolders: Set<string>;
-  toggleFolder: (key: string) => void;
-  forceOpen: boolean;
-  onSelectDoc: (docId: string) => void;
-  onOpenDocInNewTab: (docId: string) => void;
-}) {
+  drag,
+  setDrag,
+  onDropOnFolder,
+  onRequestDeleteDoc,
+  onRequestDeleteFolder,
+}: DocTreeNodeProps) {
   if (node.type === "doc") {
+    const isDragging = drag?.docId === node.id;
     return (
-      <button
-        onClick={() => onSelectDoc(node.id)}
-        onDoubleClick={() => onOpenDocInNewTab(node.id)}
-        title="Click to preview · Double-click to open in a new tab"
-        className="w-full flex items-center gap-2 px-2 py-1 text-xs text-muted-foreground hover:text-foreground hover:bg-secondary/50 rounded-md transition-colors ml-2"
-      >
-        <FileText className="size-3 shrink-0" />
-        <span className="truncate text-left flex-1">{node.title}</span>
-        {node.status === "indexed" ? (
-          <Check className="size-3 ml-auto shrink-0 text-emerald-500" />
-        ) : node.status === "metadata_only" ? (
-          <Paperclip className="size-3 ml-auto shrink-0" />
-        ) : null}
-      </button>
+      <ContextMenu>
+        <ContextMenuTrigger asChild>
+          <button
+            draggable
+            onDragStart={(e) => {
+              setDrag({ docId: node.id, spaceId, currentPath: node.path });
+              e.dataTransfer.effectAllowed = "move";
+              // Setting any data keeps Firefox happy.
+              e.dataTransfer.setData("text/plain", node.id);
+            }}
+            onDragEnd={() => setDrag(null)}
+            onClick={() => onSelectDoc(node.id)}
+            onDoubleClick={() => onOpenDocInNewTab(node.id)}
+            title="Click to preview · Double-click to open in a new tab · Drag onto a folder to move · Right-click for more"
+            className={cn(
+              "w-full flex items-center gap-2 px-2 py-1 text-xs text-muted-foreground hover:text-foreground hover:bg-secondary/50 rounded-md transition-colors ml-2",
+              isDragging && "opacity-50",
+            )}
+          >
+            <FileText className="size-3 shrink-0" />
+            <span className="truncate text-left flex-1">{node.title}</span>
+            {node.status === "indexed" ? (
+              <Check className="size-3 ml-auto shrink-0 text-emerald-500" />
+            ) : node.status === "metadata_only" ? (
+              <Paperclip className="size-3 ml-auto shrink-0" />
+            ) : null}
+          </button>
+        </ContextMenuTrigger>
+        <ContextMenuContent>
+          <ContextMenuItem onClick={() => onOpenDocInNewTab(node.id)}>
+            <SquareArrowOutUpRight />
+            Open in new tab
+          </ContextMenuItem>
+          <ContextMenuSeparator />
+          <ContextMenuItem
+            variant="destructive"
+            onClick={() => onRequestDeleteDoc(node.id, node.title)}
+          >
+            <Trash2 />
+            Delete
+          </ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
     );
   }
 
   const key = `${spaceId}:${node.path}`;
   const open = forceOpen || expandedFolders.has(key);
+  // A folder can accept a drop only when the dragged doc lives in the same
+  // space and isn't already in this exact folder.
+  const canAcceptDrop = (() => {
+    if (!drag) return false;
+    if (drag.spaceId !== spaceId) return false;
+    const currentFolder = drag.currentPath
+      .split("/")
+      .slice(0, -1)
+      .join("/");
+    return currentFolder !== node.path;
+  })();
   return (
-    <div>
-      <button
-        onClick={() => !forceOpen && toggleFolder(key)}
-        className="w-full flex items-center gap-2 px-2 py-1 text-xs text-muted-foreground hover:text-foreground hover:bg-secondary/50 rounded-md transition-colors ml-2"
-      >
-        {open ? (
-          <ChevronDown className="size-3" />
-        ) : (
-          <ChevronRight className="size-3" />
-        )}
-        <Folder className="size-3" />
-        <span className="truncate">{node.name}</span>
-      </button>
+    <FolderRow
+      node={node}
+      open={open}
+      onToggle={() => !forceOpen && toggleFolder(key)}
+      canAcceptDrop={canAcceptDrop}
+      onDropDoc={() => onDropOnFolder(node.path)}
+      onRequestDelete={() => onRequestDeleteFolder(node.path)}
+    >
       {open && (
         <div className="ml-4 border-l border-border/50">
           {node.children.map((child) => (
@@ -539,10 +811,83 @@ function DocTreeNode({
               forceOpen={forceOpen}
               onSelectDoc={onSelectDoc}
               onOpenDocInNewTab={onOpenDocInNewTab}
+              drag={drag}
+              setDrag={setDrag}
+              onDropOnFolder={onDropOnFolder}
+              onRequestDeleteDoc={onRequestDeleteDoc}
+              onRequestDeleteFolder={onRequestDeleteFolder}
             />
           ))}
         </div>
       )}
+    </FolderRow>
+  );
+}
+
+function FolderRow({
+  node,
+  open,
+  onToggle,
+  canAcceptDrop,
+  onDropDoc,
+  onRequestDelete,
+  children,
+}: {
+  node: Extract<TreeNode, { type: "folder" }>;
+  open: boolean;
+  onToggle: () => void;
+  canAcceptDrop: boolean;
+  onDropDoc: () => void;
+  onRequestDelete: () => void;
+  children?: React.ReactNode;
+}) {
+  const [over, setOver] = React.useState(false);
+  return (
+    <div>
+      <ContextMenu>
+        <ContextMenuTrigger asChild>
+          <button
+            onClick={onToggle}
+            onDragOver={(e) => {
+              if (!canAcceptDrop) return;
+              e.preventDefault();
+              e.stopPropagation();
+              e.dataTransfer.dropEffect = "move";
+              if (!over) setOver(true);
+            }}
+            onDragLeave={() => setOver(false)}
+            onDrop={(e) => {
+              if (!canAcceptDrop) return;
+              e.preventDefault();
+              e.stopPropagation();
+              setOver(false);
+              onDropDoc();
+            }}
+            className={cn(
+              "w-full flex items-center gap-2 px-2 py-1 text-xs text-muted-foreground hover:text-foreground hover:bg-secondary/50 rounded-md transition-colors ml-2",
+              over && "ring-1 ring-primary bg-primary/10 text-foreground",
+            )}
+          >
+            {open ? (
+              <ChevronDown className="size-3" />
+            ) : (
+              <ChevronRight className="size-3" />
+            )}
+            <Folder className="size-3" />
+            <span className="truncate">{node.name}</span>
+          </button>
+        </ContextMenuTrigger>
+        <ContextMenuContent>
+          <ContextMenuItem
+            variant="destructive"
+            onClick={() => onRequestDelete()}
+          >
+            <Trash2 />
+            Delete folder
+          </ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
+      {children}
     </div>
   );
 }

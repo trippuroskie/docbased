@@ -182,13 +182,42 @@ export async function DELETE(
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
-  const { error } = await supabase
+  // Auth check in app code: RLS would otherwise trip the recursive users
+  // policy when it checks `is_admin`.
+  const admin = createServiceClient();
+  const { data: doc } = await admin
+    .from("documents")
+    .select("space_id")
+    .eq("id", id)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (!doc) return NextResponse.json({ error: "not_found" }, { status: 404 });
+
+  const { data: me } = await admin
+    .from("users")
+    .select("is_admin")
+    .eq("id", user.id)
+    .single();
+  let allowed = me?.is_admin === true;
+  if (!allowed) {
+    const { data: access } = await admin
+      .from("space_access")
+      .select("role")
+      .eq("user_id", user.id)
+      .eq("space_id", doc.space_id as string)
+      .maybeSingle();
+    allowed = access?.role === "editor" || access?.role === "owner";
+  }
+  if (!allowed) {
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
+
+  const { error } = await admin
     .from("documents")
     .update({ deleted_at: new Date().toISOString() })
     .eq("id", id);
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
-  const admin = createServiceClient();
   await admin.from("audit_log").insert({
     actor_id: user.id,
     action: "delete",
