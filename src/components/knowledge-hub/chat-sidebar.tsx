@@ -111,6 +111,7 @@ type DocDragPayload = {
 
 type PendingDelete =
   | { kind: "doc"; docId: string; title: string }
+  | { kind: "docs"; docIds: string[] }
   | { kind: "folder"; spaceId: string; folderPath: string };
 
 export function ChatSidebar({
@@ -146,6 +147,12 @@ export function ChatSidebar({
   const [pendingDelete, setPendingDelete] =
     React.useState<PendingDelete | null>(null);
   const [deleting, setDeleting] = React.useState(false);
+  // Multi-select state for the doc tree. `anchorDocId` is the pivot for
+  // shift-click range selection (standard file-explorer behavior).
+  const [selectedDocIds, setSelectedDocIds] = React.useState<Set<string>>(
+    () => new Set(),
+  );
+  const [anchorDocId, setAnchorDocId] = React.useState<string | null>(null);
 
   const deleteDoc = React.useCallback(
     async (docId: string, title: string) => {
@@ -160,6 +167,30 @@ export function ChatSidebar({
     },
     [],
   );
+
+  const deleteDocs = React.useCallback(async (docIds: string[]) => {
+    const results = await Promise.all(
+      docIds.map((id) =>
+        fetch(`/api/documents/${id}`, { method: "DELETE" })
+          .then((r) => ({ id, ok: r.ok }))
+          .catch(() => ({ id, ok: false })),
+      ),
+    );
+    const failed = results.filter((r) => !r.ok);
+    if (failed.length === 0) {
+      toast.success(
+        `Deleted ${docIds.length} document${docIds.length === 1 ? "" : "s"}.`,
+      );
+      return true;
+    }
+    const succeeded = docIds.length - failed.length;
+    if (succeeded === 0) {
+      toast.error("Delete failed.");
+      return false;
+    }
+    toast.error(`Deleted ${succeeded}, ${failed.length} failed.`);
+    return true;
+  }, []);
 
   const deleteFolder = React.useCallback(
     async (spaceId: string, folderPath: string) => {
@@ -190,15 +221,19 @@ export function ChatSidebar({
     let ok = false;
     if (pendingDelete.kind === "doc") {
       ok = await deleteDoc(pendingDelete.docId, pendingDelete.title);
+    } else if (pendingDelete.kind === "docs") {
+      ok = await deleteDocs(pendingDelete.docIds);
     } else {
       ok = await deleteFolder(pendingDelete.spaceId, pendingDelete.folderPath);
     }
     setDeleting(false);
     if (ok) {
       setPendingDelete(null);
+      setSelectedDocIds(new Set());
+      setAnchorDocId(null);
       router.refresh();
     }
-  }, [pendingDelete, deleting, deleteDoc, deleteFolder, router]);
+  }, [pendingDelete, deleting, deleteDoc, deleteDocs, deleteFolder, router]);
 
   const moveDoc = React.useCallback(
     async (payload: DocDragPayload, targetFolder: string) => {
@@ -281,6 +316,92 @@ export function ChatSidebar({
       .map((s) => ({ ...s, tree: filterTree(s.tree, q) }))
       .filter((s) => s.tree.length > 0);
   }, [spaces, docSearch]);
+
+  // Flat list of currently-visible doc IDs, in render order. Used to compute
+  // the range for shift-click selection.
+  const visibleDocOrder = React.useMemo(() => {
+    const forceOpen = docSearch.trim().length > 0;
+    const out: string[] = [];
+    const walk = (nodes: TreeNode[], spaceId: string) => {
+      for (const n of nodes) {
+        if (n.type === "doc") {
+          out.push(n.id);
+        } else {
+          const key = `${spaceId}:${n.path}`;
+          if (forceOpen || expandedFolders.has(key)) walk(n.children, spaceId);
+        }
+      }
+    };
+    for (const s of filteredSpaces) {
+      if (forceOpen || expandedSpaces.has(s.id)) walk(s.tree, s.id);
+    }
+    return out;
+  }, [filteredSpaces, expandedSpaces, expandedFolders, docSearch]);
+
+  // Click handler for a doc row. Mirrors file-explorer conventions:
+  //   plain click → reset selection + open preview
+  //   shift+click → range select from anchor to target
+  //   ctrl/cmd+click → toggle target in selection
+  // Shift/ctrl clicks don't change the previewed doc.
+  const handleDocClick = React.useCallback(
+    (docId: string, e: React.MouseEvent) => {
+      if (e.shiftKey && anchorDocId) {
+        const a = visibleDocOrder.indexOf(anchorDocId);
+        const b = visibleDocOrder.indexOf(docId);
+        if (a >= 0 && b >= 0) {
+          const [lo, hi] = a < b ? [a, b] : [b, a];
+          setSelectedDocIds(new Set(visibleDocOrder.slice(lo, hi + 1)));
+          return;
+        }
+      }
+      if (e.metaKey || e.ctrlKey) {
+        setSelectedDocIds((prev) => {
+          const next = new Set(prev);
+          if (next.has(docId)) next.delete(docId);
+          else next.add(docId);
+          return next;
+        });
+        setAnchorDocId(docId);
+        return;
+      }
+      setSelectedDocIds(new Set([docId]));
+      setAnchorDocId(docId);
+      onSelectDoc(docId);
+    },
+    [anchorDocId, visibleDocOrder, onSelectDoc],
+  );
+
+  // Right-clicking an already-selected item keeps the multi-selection; right-
+  // clicking elsewhere switches selection to just that item (Finder behavior).
+  const handleDocContextMenuOpen = React.useCallback((docId: string) => {
+    setSelectedDocIds((prev) => {
+      if (prev.has(docId) && prev.size > 1) return prev;
+      return new Set([docId]);
+    });
+    setAnchorDocId(docId);
+  }, []);
+
+  // Escape clears the multi-selection. Skipped while typing in an input so we
+  // don't fight with the search box or chat composer.
+  React.useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      if (selectedDocIds.size === 0) return;
+      const t = e.target as HTMLElement | null;
+      if (
+        t &&
+        (t.tagName === "INPUT" ||
+          t.tagName === "TEXTAREA" ||
+          t.isContentEditable)
+      ) {
+        return;
+      }
+      setSelectedDocIds(new Set());
+      setAnchorDocId(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [selectedDocIds]);
 
   if (isCollapsed) {
     return (
@@ -516,8 +637,10 @@ export function ChatSidebar({
                           expandedFolders={expandedFolders}
                           toggleFolder={toggleFolder}
                           forceOpen={docSearch.trim().length > 0}
-                          onSelectDoc={onSelectDoc}
+                          onDocClick={handleDocClick}
                           onOpenDocInNewTab={onOpenDocInNewTab}
+                          selectedDocIds={selectedDocIds}
+                          onDocContextMenuOpen={handleDocContextMenuOpen}
                           drag={drag}
                           setDrag={setDrag}
                           onDropOnFolder={(folderPath) => {
@@ -528,6 +651,9 @@ export function ChatSidebar({
                           }}
                           onRequestDeleteDoc={(docId, title) =>
                             setPendingDelete({ kind: "doc", docId, title })
+                          }
+                          onRequestDeleteDocs={(docIds) =>
+                            setPendingDelete({ kind: "docs", docIds })
                           }
                           onRequestDeleteFolder={(folderPath) =>
                             setPendingDelete({
@@ -581,14 +707,18 @@ export function ChatSidebar({
           <AlertDialogTitle>
             {pendingDelete?.kind === "folder"
               ? "Delete folder?"
-              : "Delete document?"}
+              : pendingDelete?.kind === "docs"
+                ? `Delete ${pendingDelete.docIds.length} documents?`
+                : "Delete document?"}
           </AlertDialogTitle>
           <AlertDialogDescription>
             {pendingDelete?.kind === "folder"
               ? `Every document under "${pendingDelete.folderPath}" will be removed from the workspace. This cannot be undone from the UI.`
-              : pendingDelete?.kind === "doc"
-                ? `"${pendingDelete.title}" will be removed from the workspace. This cannot be undone from the UI.`
-                : ""}
+              : pendingDelete?.kind === "docs"
+                ? `${pendingDelete.docIds.length} documents will be removed from the workspace. This cannot be undone from the UI.`
+                : pendingDelete?.kind === "doc"
+                  ? `"${pendingDelete.title}" will be removed from the workspace. This cannot be undone from the UI.`
+                  : ""}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
@@ -705,12 +835,15 @@ type DocTreeNodeProps = {
   expandedFolders: Set<string>;
   toggleFolder: (key: string) => void;
   forceOpen: boolean;
-  onSelectDoc: (docId: string) => void;
+  onDocClick: (docId: string, e: React.MouseEvent) => void;
   onOpenDocInNewTab: (docId: string) => void;
+  selectedDocIds: Set<string>;
+  onDocContextMenuOpen: (docId: string) => void;
   drag: DocDragPayload | null;
   setDrag: (d: DocDragPayload | null) => void;
   onDropOnFolder: (folderPath: string) => void;
   onRequestDeleteDoc: (docId: string, title: string) => void;
+  onRequestDeleteDocs: (docIds: string[]) => void;
   onRequestDeleteFolder: (folderPath: string) => void;
 };
 
@@ -720,18 +853,28 @@ function DocTreeNode({
   expandedFolders,
   toggleFolder,
   forceOpen,
-  onSelectDoc,
+  onDocClick,
   onOpenDocInNewTab,
+  selectedDocIds,
+  onDocContextMenuOpen,
   drag,
   setDrag,
   onDropOnFolder,
   onRequestDeleteDoc,
+  onRequestDeleteDocs,
   onRequestDeleteFolder,
 }: DocTreeNodeProps) {
   if (node.type === "doc") {
     const isDragging = drag?.docId === node.id;
+    const isSelected = selectedDocIds.has(node.id);
+    const multiCount = selectedDocIds.size;
+    const inMultiSelect = isSelected && multiCount >= 2;
     return (
-      <ContextMenu>
+      <ContextMenu
+        onOpenChange={(open) => {
+          if (open) onDocContextMenuOpen(node.id);
+        }}
+      >
         <ContextMenuTrigger asChild>
           <button
             draggable
@@ -742,11 +885,14 @@ function DocTreeNode({
               e.dataTransfer.setData("text/plain", node.id);
             }}
             onDragEnd={() => setDrag(null)}
-            onClick={() => onSelectDoc(node.id)}
+            onClick={(e) => onDocClick(node.id, e)}
             onDoubleClick={() => onOpenDocInNewTab(node.id)}
-            title="Click to preview · Double-click to open in a new tab · Drag onto a folder to move · Right-click for more"
+            title="Click to preview · Shift-click to select a range · Ctrl/⌘-click to toggle · Double-click for new tab · Right-click for more"
             className={cn(
-              "w-full flex items-center gap-2 px-2 py-1 text-xs text-muted-foreground hover:text-foreground hover:bg-secondary/50 rounded-md transition-colors ml-2",
+              "w-full flex items-center gap-2 px-2 py-1 text-xs rounded-md transition-colors ml-2 select-none",
+              isSelected
+                ? "bg-primary/15 text-foreground"
+                : "text-muted-foreground hover:text-foreground hover:bg-secondary/50",
               isDragging && "opacity-50",
             )}
           >
@@ -760,17 +906,26 @@ function DocTreeNode({
           </button>
         </ContextMenuTrigger>
         <ContextMenuContent>
-          <ContextMenuItem onClick={() => onOpenDocInNewTab(node.id)}>
+          <ContextMenuItem
+            onClick={() => onOpenDocInNewTab(node.id)}
+            disabled={inMultiSelect}
+          >
             <SquareArrowOutUpRight />
             Open in new tab
           </ContextMenuItem>
           <ContextMenuSeparator />
           <ContextMenuItem
             variant="destructive"
-            onClick={() => onRequestDeleteDoc(node.id, node.title)}
+            onClick={() => {
+              if (inMultiSelect) {
+                onRequestDeleteDocs([...selectedDocIds]);
+              } else {
+                onRequestDeleteDoc(node.id, node.title);
+              }
+            }}
           >
             <Trash2 />
-            Delete
+            {inMultiSelect ? `Delete ${multiCount} documents` : "Delete"}
           </ContextMenuItem>
         </ContextMenuContent>
       </ContextMenu>
@@ -809,12 +964,15 @@ function DocTreeNode({
               expandedFolders={expandedFolders}
               toggleFolder={toggleFolder}
               forceOpen={forceOpen}
-              onSelectDoc={onSelectDoc}
+              onDocClick={onDocClick}
               onOpenDocInNewTab={onOpenDocInNewTab}
+              selectedDocIds={selectedDocIds}
+              onDocContextMenuOpen={onDocContextMenuOpen}
               drag={drag}
               setDrag={setDrag}
               onDropOnFolder={onDropOnFolder}
               onRequestDeleteDoc={onRequestDeleteDoc}
+              onRequestDeleteDocs={onRequestDeleteDocs}
               onRequestDeleteFolder={onRequestDeleteFolder}
             />
           ))}
