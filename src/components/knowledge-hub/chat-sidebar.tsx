@@ -24,7 +24,6 @@ import {
   SquareArrowOutUpRight,
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
   ContextMenu,
@@ -46,6 +45,7 @@ import {
 import { cn } from "@/lib/utils";
 import type { TreeNode } from "@/lib/tree";
 import type { SpaceWithTree } from "./types";
+import { SearchOverlay } from "./search-overlay";
 
 export type ChatSummary = {
   id: string;
@@ -132,8 +132,7 @@ export function ChatSidebar({
 }: ChatSidebarProps) {
   const router = useRouter();
   const [activeTab, setActiveTab] = React.useState<string>("docs");
-  const [chatSearch, setChatSearch] = React.useState("");
-  const [docSearch, setDocSearch] = React.useState("");
+  const [searchOpen, setSearchOpen] = React.useState(false);
   const [expandedSpaces, setExpandedSpaces] = React.useState<Set<string>>(
     () => new Set(spaces.length > 0 ? [spaces[0].id] : []),
   );
@@ -285,19 +284,11 @@ export function ChatSidebar({
     });
   };
 
-  const filteredConversations = React.useMemo(() => {
-    if (!chatSearch.trim()) return conversations;
-    const q = chatSearch.toLowerCase();
-    return conversations.filter((c) =>
-      (c.title ?? "").toLowerCase().includes(q),
-    );
-  }, [conversations, chatSearch]);
-
   // Group conversations by recency bucket, preserving order.
   const groupedConversations = React.useMemo(() => {
     const groups: { label: string; items: ChatSummary[] }[] = [];
     let currentLabel = "";
-    for (const c of filteredConversations) {
+    for (const c of conversations) {
       const label = formatGroup(c.created_at);
       if (label !== currentLabel) {
         groups.push({ label, items: [] });
@@ -306,21 +297,11 @@ export function ChatSidebar({
       groups[groups.length - 1].items.push(c);
     }
     return groups;
-  }, [filteredConversations]);
-
-  // Filter spaces tree by doc title.
-  const filteredSpaces = React.useMemo(() => {
-    if (!docSearch.trim()) return spaces;
-    const q = docSearch.toLowerCase();
-    return spaces
-      .map((s) => ({ ...s, tree: filterTree(s.tree, q) }))
-      .filter((s) => s.tree.length > 0);
-  }, [spaces, docSearch]);
+  }, [conversations]);
 
   // Flat list of currently-visible doc IDs, in render order. Used to compute
   // the range for shift-click selection.
   const visibleDocOrder = React.useMemo(() => {
-    const forceOpen = docSearch.trim().length > 0;
     const out: string[] = [];
     const walk = (nodes: TreeNode[], spaceId: string) => {
       for (const n of nodes) {
@@ -328,15 +309,15 @@ export function ChatSidebar({
           out.push(n.id);
         } else {
           const key = `${spaceId}:${n.path}`;
-          if (forceOpen || expandedFolders.has(key)) walk(n.children, spaceId);
+          if (expandedFolders.has(key)) walk(n.children, spaceId);
         }
       }
     };
-    for (const s of filteredSpaces) {
-      if (forceOpen || expandedSpaces.has(s.id)) walk(s.tree, s.id);
+    for (const s of spaces) {
+      if (expandedSpaces.has(s.id)) walk(s.tree, s.id);
     }
     return out;
-  }, [filteredSpaces, expandedSpaces, expandedFolders, docSearch]);
+  }, [spaces, expandedSpaces, expandedFolders]);
 
   // Click handler for a doc row. Mirrors file-explorer conventions:
   //   plain click → reset selection + open preview
@@ -381,6 +362,18 @@ export function ChatSidebar({
     setAnchorDocId(docId);
   }, []);
 
+  // Global ⌘K / Ctrl+K opens the search overlay.
+  React.useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setSearchOpen(true);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   // Escape clears the multi-selection. Skipped while typing in an input so we
   // don't fight with the search box or chat composer.
   React.useEffect(() => {
@@ -405,6 +398,7 @@ export function ChatSidebar({
 
   if (isCollapsed) {
     return (
+      <>
       <aside className="w-12 border-r border-border flex flex-col items-center py-3 gap-1 shrink-0">
         <Button
           variant="ghost"
@@ -414,6 +408,15 @@ export function ChatSidebar({
           title="Expand sidebar"
         >
           <PanelLeft className="size-4 text-muted-foreground" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-8"
+          onClick={() => setSearchOpen(true)}
+          title="Search (⌘K)"
+        >
+          <Search className="size-4 text-muted-foreground" />
         </Button>
         <Button
           variant="ghost"
@@ -472,6 +475,14 @@ export function ChatSidebar({
           </Link>
         </div>
       </aside>
+      <SearchOverlay
+        open={searchOpen}
+        onOpenChange={setSearchOpen}
+        spaces={spaces.map((s) => ({ id: s.id, name: s.name, color: s.color }))}
+        onSelectDoc={onSelectDoc}
+        onOpenDocInNewTab={onOpenDocInNewTab}
+      />
+      </>
     );
   }
 
@@ -497,7 +508,7 @@ export function ChatSidebar({
         </Button>
       </div>
 
-      <div className="px-3 pb-3 shrink-0">
+      <div className="px-3 pb-3 shrink-0 flex flex-col gap-2">
         <Button
           onClick={onNewChat}
           className="w-full h-8 gap-1.5 justify-center bg-secondary text-secondary-foreground hover:bg-secondary/80"
@@ -505,6 +516,17 @@ export function ChatSidebar({
           <SquarePen className="size-3.5" />
           New chat
         </Button>
+        <button
+          type="button"
+          onClick={() => setSearchOpen(true)}
+          className="group flex items-center gap-2 h-8 w-full rounded-lg bg-secondary/40 hover:bg-secondary/70 px-2.5 text-xs text-muted-foreground transition-colors"
+        >
+          <Search className="size-3.5 shrink-0" />
+          <span className="flex-1 text-left">Search…</span>
+          <kbd className="hidden sm:inline-flex items-center gap-0.5 rounded border border-border bg-background/40 px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground">
+            ⌘K
+          </kbd>
+        </button>
       </div>
 
       <Tabs
@@ -527,16 +549,6 @@ export function ChatSidebar({
           value="chats"
           className="flex-1 min-h-0 flex flex-col gap-2 mt-0 data-[state=inactive]:hidden"
         >
-          <div className="relative shrink-0">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
-            <Input
-              placeholder="Search chats…"
-              value={chatSearch}
-              onChange={(e) => setChatSearch(e.target.value)}
-              className="pl-8 h-8 text-xs bg-secondary/40"
-            />
-          </div>
-
           <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar -mx-1 px-1">
             {conversationsLoading && conversations.length === 0 && (
               <p className="text-xs text-muted-foreground px-2 py-2">
@@ -545,9 +557,7 @@ export function ChatSidebar({
             )}
             {!conversationsLoading && groupedConversations.length === 0 && (
               <p className="text-xs text-muted-foreground px-2 py-2">
-                {chatSearch.trim()
-                  ? "No matches."
-                  : "No conversations yet. Start a new chat."}
+                No conversations yet. Start a new chat.
               </p>
             )}
             {groupedConversations.map((g) => (
@@ -584,36 +594,21 @@ export function ChatSidebar({
               Upload documents
             </Link>
           )}
-          <div className="relative shrink-0">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
-            <Input
-              placeholder="Filter docs…"
-              value={docSearch}
-              onChange={(e) => setDocSearch(e.target.value)}
-              className="pl-8 h-8 text-xs bg-secondary/40"
-            />
-          </div>
-
           <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar -mx-1 px-1">
-            {filteredSpaces.length === 0 && (
+            {spaces.length === 0 && (
               <p className="text-xs text-muted-foreground px-2 py-2">
-                {docSearch.trim()
-                  ? "No matches."
-                  : "No accessible workspaces."}
+                No accessible workspaces.
               </p>
             )}
-            {filteredSpaces.map((space) => {
-              const open =
-                expandedSpaces.has(space.id) || docSearch.trim().length > 0;
+            {spaces.map((space) => {
+              const open = expandedSpaces.has(space.id);
               const isDropTarget = drag !== null && drag.spaceId === space.id;
               return (
                 <div key={space.id} className="mb-2">
                   <SpaceHeaderRow
                     space={space}
                     open={open}
-                    onToggle={() =>
-                      !docSearch.trim() && toggleSpace(space.id)
-                    }
+                    onToggle={() => toggleSpace(space.id)}
                     canAcceptDrop={isDropTarget}
                     onDropDoc={() => {
                       if (drag && drag.spaceId === space.id) {
@@ -636,7 +631,7 @@ export function ChatSidebar({
                           spaceId={space.id}
                           expandedFolders={expandedFolders}
                           toggleFolder={toggleFolder}
-                          forceOpen={docSearch.trim().length > 0}
+                          forceOpen={false}
                           onDocClick={handleDocClick}
                           onOpenDocInNewTab={onOpenDocInNewTab}
                           selectedDocIds={selectedDocIds}
@@ -736,6 +731,13 @@ export function ChatSidebar({
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
+    <SearchOverlay
+      open={searchOpen}
+      onOpenChange={setSearchOpen}
+      spaces={spaces.map((s) => ({ id: s.id, name: s.name, color: s.color }))}
+      onSelectDoc={onSelectDoc}
+      onOpenDocInNewTab={onOpenDocInNewTab}
+    />
     </>
   );
 }
@@ -1048,19 +1050,6 @@ function FolderRow({
       {children}
     </div>
   );
-}
-
-function filterTree(nodes: TreeNode[], q: string): TreeNode[] {
-  const out: TreeNode[] = [];
-  for (const n of nodes) {
-    if (n.type === "doc") {
-      if (n.title.toLowerCase().includes(q)) out.push(n);
-    } else {
-      const children = filterTree(n.children, q);
-      if (children.length > 0) out.push({ ...n, children });
-    }
-  }
-  return out;
 }
 
 // Re-export so callers can reuse the path helper if needed.

@@ -34,10 +34,13 @@ function colorFor(seed: string): string {
 export default async function HomePage({
   searchParams,
 }: {
-  searchParams: Promise<{ doc?: string; q?: string }>;
+  searchParams: Promise<{ doc?: string; q?: string; conv?: string }>;
 }) {
-  const { doc, q } = await searchParams;
+  const { doc, q, conv } = await searchParams;
   const user = await requireUser();
+  // The (app) layout also fetches user/spaces, but Next dedupes these calls
+  // because `getCurrentUserRecord` and `getAccessibleSpaces` use React's
+  // `cache()` wrapper.
   const [me, accessible, settings] = await Promise.all([
     getCurrentUserRecord(),
     getAccessibleSpaces(),
@@ -66,11 +69,9 @@ export default async function HomePage({
     <UnifiedHub
       spaces={spaces}
       spacesWithTrees={spacesWithTrees}
-      isAdmin={me?.is_admin ?? false}
-      userDisplayName={me?.display_name ?? null}
-      userEmail={me?.email ?? null}
       initialDocId={doc}
       initialQuery={q}
+      initialConversationId={conv}
       enabledChatModels={enabledChatModels}
       defaultChatModel={defaultChatModel}
     />

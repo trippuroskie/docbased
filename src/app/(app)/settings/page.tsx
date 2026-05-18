@@ -15,7 +15,8 @@ export default async function SettingsPage() {
   ]);
 
   return (
-    <main className="mx-auto w-full max-w-3xl space-y-6 p-6">
+    <main className="flex-1 min-h-0 overflow-y-auto">
+      <div className="mx-auto w-full max-w-3xl space-y-6 p-6">
       <nav
         aria-label="Breadcrumb"
         className="flex items-center gap-1 text-xs text-muted-foreground"
@@ -46,8 +47,6 @@ export default async function SettingsPage() {
         </dl>
       </section>
 
-      <ModelPreferences initial={settings} />
-
       {me?.is_admin && (
         <section className="rounded-lg border bg-card p-4 space-y-2">
           <h2 className="text-sm font-semibold">Admin</h2>
@@ -64,6 +63,8 @@ export default async function SettingsPage() {
         </section>
       )}
 
+      <ModelPreferences initial={settings} />
+
       <section className="rounded-lg border bg-card p-4 space-y-2">
         <h2 className="text-sm font-semibold">Session</h2>
         <p className="text-xs text-muted-foreground">
@@ -71,6 +72,7 @@ export default async function SettingsPage() {
         </p>
         <SignOutButton />
       </section>
+      </div>
     </main>
   );
 }

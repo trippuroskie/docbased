@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import {
   Send,
   ChevronDown,
@@ -26,7 +27,6 @@ import {
 import { Markdown } from "@/components/markdown";
 import { cn } from "@/lib/utils";
 import { stripCitationTags } from "@/lib/chat";
-import { ChatSidebar, type ChatSummary } from "./chat-sidebar";
 import { ResizablePanel } from "./resizable-panel";
 import type { SpaceWithTree } from "./types";
 import type { TreeNode } from "@/lib/tree";
@@ -142,11 +142,9 @@ function findDocInTree(
 interface UnifiedHubProps {
   spaces: WorkspaceChatSpace[];
   spacesWithTrees: SpaceWithTree[];
-  isAdmin: boolean;
-  userDisplayName?: string | null;
-  userEmail?: string | null;
   initialDocId?: string;
   initialQuery?: string;
+  initialConversationId?: string;
   enabledChatModels: string[];
   defaultChatModel: string;
 }
@@ -154,16 +152,15 @@ interface UnifiedHubProps {
 export function UnifiedHub({
   spaces,
   spacesWithTrees,
-  isAdmin,
-  userDisplayName,
-  userEmail,
   initialDocId,
   initialQuery,
+  initialConversationId,
   enabledChatModels,
   defaultChatModel,
 }: UnifiedHubProps) {
-  // Layout
-  const [sidebarCollapsed, setSidebarCollapsed] = React.useState(false);
+  const router = useRouter();
+  // Layout — the left sidebar lives in the (app) layout shell, so we only own
+  // the right (chat) panel's collapse state here.
   const [chatCollapsed, setChatCollapsed] = React.useState(false);
 
   // Document center pane — multi-tab (code-editor style).
@@ -190,26 +187,43 @@ export function UnifiedHub({
   const [inputValue, setInputValue] = React.useState("");
   const [busy, setBusy] = React.useState(false);
 
-  // Sidebar data
-  const [history, setHistory] = React.useState<ChatSummary[]>([]);
-  const [historyLoading, setHistoryLoading] = React.useState(false);
   const initFired = React.useRef(false);
+  // Tracks the last conversation id we synced with the URL/loader, so that
+  // the conv-load effect doesn't re-fetch on a self-induced URL bump after
+  // the streaming response assigns an id for a brand-new conversation.
+  const lastLoadedConv = React.useRef<string | null>(null);
 
-  const refreshHistory = React.useCallback(async () => {
-    setHistoryLoading(true);
-    try {
-      const resp = await fetch("/api/chat/conversations");
-      if (!resp.ok) return;
-      const data = (await resp.json()) as { conversations: ChatSummary[] };
-      setHistory(data.conversations);
-    } finally {
-      setHistoryLoading(false);
+  // Tell the layout-level sidebar to refresh its conversation list (used after
+  // sending a message, deleting, etc).
+  const refreshHistory = React.useCallback(() => {
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("hub:refresh-conversations"));
     }
   }, []);
 
+  // Whenever the active conversation changes, broadcast so the sidebar can
+  // highlight the right row, and mirror the id into the URL so that
+  // navigating away to /settings and back reopens the same conversation.
   React.useEffect(() => {
-    void refreshHistory();
-  }, [refreshHistory]);
+    if (typeof window === "undefined") return;
+    window.dispatchEvent(
+      new CustomEvent("hub:active-conversation", {
+        detail: { id: conversationId },
+      }),
+    );
+    if (conversationId && initialConversationId !== conversationId) {
+      // Replace (not push) so the back button doesn't pile up entries while
+      // streaming assigns ids to brand-new conversations.
+      lastLoadedConv.current = conversationId;
+      const params = new URLSearchParams(window.location.search);
+      params.set("conv", conversationId);
+      // Remove `q` once the conversation has been created — it was a one-shot.
+      params.delete("q");
+      const next = `${window.location.pathname}?${params.toString()}`;
+      router.replace(next, { scroll: false });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversationId]);
 
   // Build a placeholder tab from the tree metadata (so we can render the tab
   // bar immediately) while the full doc content streams in via /api/documents.
@@ -354,56 +368,72 @@ export function UnifiedHub({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialDocId]);
 
+  // Layout-level sidebar dispatches `hub:open-doc` when we're already on the
+  // hub, so doc-clicks open in-place without losing the chat/tab state.
+  React.useEffect(() => {
+    const onOpenDoc = (e: Event) => {
+      const detail = (e as CustomEvent<{ docId: string; pinned: boolean }>)
+        .detail;
+      if (!detail) return;
+      if (detail.pinned) openDocPinned(detail.docId);
+      else openDocPreview(detail.docId);
+    };
+    window.addEventListener("hub:open-doc", onOpenDoc);
+    return () => window.removeEventListener("hub:open-doc", onOpenDoc);
+  }, [openDocPreview, openDocPinned]);
+
   const activeDoc = React.useMemo(
     () => tabs.find((t) => t.id === activeTabId) ?? null,
     [tabs, activeTabId],
   );
 
-  const startNewChat = () => {
-    setConversationId(null);
-    setMessages([]);
-    setInputValue("");
-  };
-
-  const loadConversation = async (id: string) => {
-    if (busy) return;
-    try {
-      setBusy(true);
-      const resp = await fetch(`/api/chat/conversations/${id}`);
-      if (!resp.ok) return;
-      const data = (await resp.json()) as {
-        conversation: { id: string; title: string | null; spaceIds: string[] };
-        messages: StoredMessage[];
-      };
-      setConversationId(data.conversation.id);
-      if (data.conversation.spaceIds.length > 0) {
-        setSelectedSpaceIds(
-          data.conversation.spaceIds.filter((sid) =>
-            spaces.some((s) => s.id === sid),
-          ),
+  const loadConversation = React.useCallback(
+    async (id: string) => {
+      try {
+        setBusy(true);
+        const resp = await fetch(`/api/chat/conversations/${id}`);
+        if (!resp.ok) return;
+        const data = (await resp.json()) as {
+          conversation: { id: string; title: string | null; spaceIds: string[] };
+          messages: StoredMessage[];
+        };
+        setConversationId(data.conversation.id);
+        if (data.conversation.spaceIds.length > 0) {
+          setSelectedSpaceIds(
+            data.conversation.spaceIds.filter((sid) =>
+              spaces.some((s) => s.id === sid),
+            ),
+          );
+        }
+        setMessages(
+          data.messages.map((m) => ({
+            id: m.id,
+            role: m.role,
+            content: m.content,
+            sources: m.citations ?? undefined,
+          })),
         );
+      } finally {
+        setBusy(false);
       }
-      setMessages(
-        data.messages.map((m) => ({
-          id: m.id,
-          role: m.role,
-          content: m.content,
-          sources: m.citations ?? undefined,
-        })),
-      );
-    } finally {
-      setBusy(false);
-    }
-  };
+    },
+    [spaces],
+  );
 
-  const deleteConversation = async (id: string) => {
-    const resp = await fetch(`/api/chat/conversations/${id}`, {
-      method: "DELETE",
-    });
-    if (!resp.ok) return;
-    setHistory((prev) => prev.filter((c) => c.id !== id));
-    if (id === conversationId) startNewChat();
-  };
+  // The sidebar drives conversation selection via the URL (?conv=<id>). Load
+  // (or reset) whenever the param changes.
+  React.useEffect(() => {
+    const target = initialConversationId ?? null;
+    if (lastLoadedConv.current === target) return;
+    lastLoadedConv.current = target;
+    if (target) {
+      void loadConversation(target);
+    } else {
+      setConversationId(null);
+      setMessages([]);
+      setInputValue("");
+    }
+  }, [initialConversationId, loadConversation]);
 
   const send = React.useCallback(
     async (text: string) => {
@@ -563,24 +593,7 @@ export function UnifiedHub({
   }, [initialQuery, send]);
 
   return (
-    <div className="flex h-full bg-background min-h-0">
-      <ChatSidebar
-        isCollapsed={sidebarCollapsed}
-        onToggleCollapse={() => setSidebarCollapsed((v) => !v)}
-        conversations={history}
-        conversationsLoading={historyLoading}
-        currentConversationId={conversationId}
-        onSelectConversation={(id) => void loadConversation(id)}
-        onDeleteConversation={(id) => void deleteConversation(id)}
-        onNewChat={startNewChat}
-        spaces={spacesWithTrees}
-        onSelectDoc={openDocPreview}
-        onOpenDocInNewTab={openDocPinned}
-        isAdmin={isAdmin}
-        userDisplayName={userDisplayName ?? null}
-        userEmail={userEmail ?? null}
-      />
-
+    <div className="flex h-full bg-background min-h-0 flex-1">
       <main className="flex-1 min-w-0 flex flex-col h-full min-h-0">
         {tabs.length > 0 ? (
           <DocCenter
