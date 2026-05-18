@@ -23,6 +23,7 @@ const Body = z.object({
   message: z.string().min(1).max(4000),
   spaceIds: z.array(z.string().uuid()).optional(),
   model: z.string().optional(),
+  contextDocId: z.string().uuid().optional(),
 });
 
 type StreamedToolCall = {
@@ -136,6 +137,30 @@ export async function POST(request: Request) {
     spaceNameById: new Map(accessibleSpaces.map((s) => [s.id, s.name])),
   };
 
+  // Resolve the "currently open" doc (chip in the chat footer) to title + path.
+  // Only honor it when the doc lives in a space the user can access — never
+  // leak metadata for docs outside their scope, even if a client posts an ID.
+  let openDocContext: { id: string; title: string; path: string } | null = null;
+  if (body.contextDocId) {
+    const accessibleIds = accessibleSpaces.map((s) => s.id);
+    if (accessibleIds.length > 0) {
+      const { data: doc } = await admin
+        .from("documents")
+        .select("id, title, path, space_id")
+        .eq("id", body.contextDocId)
+        .in("space_id", accessibleIds)
+        .is("deleted_at", null)
+        .maybeSingle();
+      if (doc) {
+        openDocContext = {
+          id: doc.id as string,
+          title: doc.title as string,
+          path: (doc.path as string) ?? "",
+        };
+      }
+    }
+  }
+
   const encoder = new TextEncoder();
   const sse = new ReadableStream({
     async start(controller) {
@@ -158,6 +183,15 @@ export async function POST(request: Request) {
       // memory for follow-up references like "summarize each of those").
       const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
         { role: "system", content: SYSTEM_PROMPT },
+        ...(openDocContext
+          ? [
+              {
+                role: "system" as const,
+                content: `<open_document id="${openDocContext.id}" title="${openDocContext.title.replace(/"/g, '\\"')}" path="${openDocContext.path.replace(/"/g, '\\"')}" />
+The user is currently viewing this document in their reader. Treat references like "this", "this doc", "this article", "this page", or "the open doc" as referring to it. Call get_document with the id above if you need to read its content before answering.`,
+              },
+            ]
+          : []),
         ...priorHistory.map(
           (m): OpenAI.Chat.ChatCompletionMessageParam => ({
             role: m.role,

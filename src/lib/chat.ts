@@ -18,7 +18,8 @@ Rules:
 - Multiple citations in one statement are fine: "Restart the service <cite source="1"/><cite source="3"/>."
 - Keep answers concrete and actionable. Prefer the user's exact terminology.
 - If two tool results contradict each other, point that out and cite both.
-- Call tools eagerly — it's cheaper to look something up than to guess.`;
+- Call tools eagerly — it's cheaper to look something up than to guess.
+- If an <open_document /> tag appears in the system context, the user is viewing that doc in their reader. Treat "this", "this doc", "this article", "this page", or "the open doc" as referring to it, and call get_document with the provided id when you need its content.`;
 
 export function buildContextBlock(hits: SearchHit[]): {
   context: string;

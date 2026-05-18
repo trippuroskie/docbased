@@ -170,6 +170,14 @@ export function UnifiedHub({
   const [tabs, setTabs] = React.useState<DocTab[]>([]);
   const [activeTabId, setActiveTabId] = React.useState<string | null>(null);
 
+  // Chat context chip — defaults to the active doc, but the user can clear it
+  // per-tab. When the active tab changes, the chip re-appears for the new tab.
+  const [dismissedContextDocId, setDismissedContextDocId] = React.useState<
+    string | null
+  >(null);
+  const contextDocId =
+    activeTabId && activeTabId !== dismissedContextDocId ? activeTabId : null;
+
   // Chat right pane — model picker sourced from server-rendered user settings.
   const [model, setModel] = React.useState<string>(defaultChatModel);
   const [selectedSpaceIds, setSelectedSpaceIds] = React.useState<string[]>(
@@ -470,6 +478,7 @@ export function UnifiedHub({
             spaceIds:
               selectedSpaceIds.length > 0 ? selectedSpaceIds : undefined,
             model,
+            contextDocId: contextDocId ?? undefined,
           }),
         });
         if (!resp.ok || !resp.body) {
@@ -543,7 +552,7 @@ export function UnifiedHub({
         void refreshHistory();
       }
     },
-    [conversationId, selectedSpaceIds, model, refreshHistory],
+    [conversationId, selectedSpaceIds, model, refreshHistory, contextDocId],
   );
 
   React.useEffect(() => {
@@ -613,6 +622,14 @@ export function UnifiedHub({
           onSend={send}
           onSelectDoc={openDocPreview}
           onOpenDocInNewTab={openDocPinned}
+          contextDoc={
+            contextDocId
+              ? tabs.find((t) => t.id === contextDocId) ?? null
+              : null
+          }
+          onClearContextDoc={() =>
+            activeTabId && setDismissedContextDocId(activeTabId)
+          }
         />
       </ResizablePanel>
     </div>
@@ -779,6 +796,8 @@ interface InlineChatProps {
   onSend: (text: string) => void;
   onSelectDoc: (id: string) => void;
   onOpenDocInNewTab: (id: string) => void;
+  contextDoc: DocTab | null;
+  onClearContextDoc: () => void;
 }
 
 function InlineChat({
@@ -795,6 +814,8 @@ function InlineChat({
   onSend,
   onSelectDoc,
   onOpenDocInNewTab,
+  contextDoc,
+  onClearContextDoc,
 }: InlineChatProps) {
   const scrollRef = React.useRef<HTMLDivElement | null>(null);
   React.useEffect(() => {
@@ -879,15 +900,23 @@ function InlineChat({
               className="min-h-[64px] resize-none bg-transparent border-0 focus-visible:ring-0 focus-visible:border-0 text-sm"
             />
             <div className="flex items-center justify-between gap-2 px-2 pb-2">
-              {/* Bottom-left: workspace selector */}
-              <WorkspacePicker
-                spaces={spaces}
-                selectedSpaceIds={selectedSpaceIds}
-                allSelected={allSelected}
-                label={workspaceLabel}
-                onToggleSpace={toggleSpace}
-                onToggleAll={toggleAll}
-              />
+              {/* Bottom-left: workspace selector + open-doc context chip */}
+              <div className="flex items-center gap-1 min-w-0 flex-1">
+                <WorkspacePicker
+                  spaces={spaces}
+                  selectedSpaceIds={selectedSpaceIds}
+                  allSelected={allSelected}
+                  label={workspaceLabel}
+                  onToggleSpace={toggleSpace}
+                  onToggleAll={toggleAll}
+                />
+                {contextDoc && (
+                  <ContextDocChip
+                    doc={contextDoc}
+                    onClear={onClearContextDoc}
+                  />
+                )}
+              </div>
 
               {/* Bottom-right: model selector + send button */}
               <div className="flex items-center gap-1">
@@ -1003,6 +1032,32 @@ function WorkspacePicker({
         })}
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+function ContextDocChip({
+  doc,
+  onClear,
+}: {
+  doc: DocTab;
+  onClear: () => void;
+}) {
+  return (
+    <span
+      title={`Sent to the chat as context: ${doc.title}${doc.path ? ` — ${doc.path}` : ""}`}
+      className="inline-flex items-center gap-1 px-1.5 py-1 rounded-md text-[11px] text-muted-foreground bg-secondary/60 border border-border max-w-[160px]"
+    >
+      <FileText className="size-3 text-primary shrink-0" />
+      <span className="truncate">{doc.title}</span>
+      <button
+        type="button"
+        onClick={onClear}
+        className="size-3.5 rounded flex items-center justify-center hover:bg-secondary shrink-0"
+        aria-label="Remove from chat context"
+      >
+        <X className="size-3" />
+      </button>
+    </span>
   );
 }
 
