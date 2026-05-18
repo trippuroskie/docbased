@@ -99,7 +99,7 @@ export function ChatSidebar({
   userDisplayName,
   userEmail,
 }: ChatSidebarProps) {
-  const [activeTab, setActiveTab] = React.useState<string>("chats");
+  const [activeTab, setActiveTab] = React.useState<string>("docs");
   const [chatSearch, setChatSearch] = React.useState("");
   const [docSearch, setDocSearch] = React.useState("");
   const [expandedSpaces, setExpandedSpaces] = React.useState<Set<string>>(
@@ -187,11 +187,11 @@ export function ChatSidebar({
           className="size-8"
           onClick={() => {
             onToggleCollapse();
-            setActiveTab("chats");
+            setActiveTab("docs");
           }}
-          title="Chat history"
+          title="Documents"
         >
-          <MessageSquare className="size-4 text-muted-foreground" />
+          <FileSearch className="size-4 text-muted-foreground" />
         </Button>
         <Button
           variant="ghost"
@@ -199,11 +199,11 @@ export function ChatSidebar({
           className="size-8"
           onClick={() => {
             onToggleCollapse();
-            setActiveTab("docs");
+            setActiveTab("chats");
           }}
-          title="Documents"
+          title="Chat history"
         >
-          <FileSearch className="size-4 text-muted-foreground" />
+          <MessageSquare className="size-4 text-muted-foreground" />
         </Button>
         {isAdmin && (
           <Link
@@ -268,13 +268,13 @@ export function ChatSidebar({
         className="flex-1 min-h-0 px-3 pb-3 gap-3 flex flex-col"
       >
         <TabsList className="w-full bg-secondary/40">
-          <TabsTrigger value="chats" className="flex-1 text-xs gap-1.5">
-            <MessageSquare className="size-3" />
-            Chats
-          </TabsTrigger>
           <TabsTrigger value="docs" className="flex-1 text-xs gap-1.5">
             <FileSearch className="size-3" />
             Docs
+          </TabsTrigger>
+          <TabsTrigger value="chats" className="flex-1 text-xs gap-1.5">
+            <MessageSquare className="size-3" />
+            Chats
           </TabsTrigger>
         </TabsList>
 
