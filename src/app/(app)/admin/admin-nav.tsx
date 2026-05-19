@@ -18,21 +18,25 @@ const TABS = [
 export function AdminNav() {
   const pathname = usePathname();
   return (
-    <nav className="flex flex-wrap items-center gap-1 border-b px-4 py-2 text-sm">
+    <div className="flex flex-wrap items-center gap-2 border-b px-4 pt-2 text-sm">
       <Link
         href="/"
-        className="inline-flex items-center gap-1.5 rounded px-2 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        className="inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
         title="Back to Knowledge Hub"
       >
         <ArrowLeft className="size-4" />
         <span>Knowledge Hub</span>
       </Link>
-      <div className="mx-1 h-5 w-px bg-border" />
-      <span className="inline-flex items-center gap-1.5 px-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+      <div className="h-5 w-px bg-border" />
+      <span className="inline-flex h-8 items-center gap-1.5 px-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
         <Shield className="size-3.5" />
         Admin
       </span>
-      <div className="ml-1 flex flex-wrap gap-1">
+      <nav
+        role="tablist"
+        aria-label="Admin sections"
+        className="ml-1 flex flex-wrap items-center gap-1"
+      >
         {TABS.map((t) => {
           const active =
             t.href === "/admin"
@@ -42,19 +46,21 @@ export function AdminNav() {
             <Link
               key={t.href}
               href={t.href}
+              role="tab"
+              aria-selected={active}
               aria-current={active ? "page" : undefined}
               className={cn(
-                "rounded px-3 py-1.5 transition-colors",
+                "relative inline-flex h-8 items-center rounded-md px-3 text-sm font-medium transition-colors",
                 active
-                  ? "bg-accent font-medium text-foreground"
-                  : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                  ? "text-foreground after:absolute after:inset-x-2 after:-bottom-px after:h-0.5 after:bg-foreground"
+                  : "text-muted-foreground hover:text-foreground",
               )}
             >
               {t.label}
             </Link>
           );
         })}
-      </div>
-    </nav>
+      </nav>
+    </div>
   );
 }

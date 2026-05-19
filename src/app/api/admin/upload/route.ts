@@ -29,6 +29,7 @@ export async function POST(request: Request) {
   const spaceId = form.get("spaceId") as string | null;
   const tagsRaw = form.get("tags") as string | null;
   const conflict = (form.get("conflict") as string | null) ?? "replace";
+  const targetFolder = (form.get("targetFolder") as string | null) ?? "";
 
   if (!file || !spaceId) {
     return NextResponse.json({ error: "missing_fields" }, { status: 400 });
@@ -45,6 +46,7 @@ export async function POST(request: Request) {
         uploaderId: user.id,
         tags,
         conflict: conflict as "replace" | "skip" | "version",
+        targetFolder,
       },
     );
     return NextResponse.json({ results });

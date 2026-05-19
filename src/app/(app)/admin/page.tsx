@@ -1,6 +1,14 @@
 import Link from "next/link";
+import { ChevronRight, ExternalLink } from "lucide-react";
 import { createServiceClient } from "@/lib/supabase/server";
 import { env } from "@/lib/env";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +32,7 @@ export default async function AdminHomePage() {
     admin.from("chunks").select("id", { count: "exact", head: true }),
   ]);
 
-  const tiles = [
+  const tiles: { label: string; value: number | string; href?: string }[] = [
     { label: "Spaces", value: spaceCount ?? 0, href: "/admin/spaces" },
     { label: "Users", value: userCount ?? 0, href: "/admin/users" },
     { label: "Documents (active)", value: docCount ?? 0 },
@@ -35,63 +43,107 @@ export default async function AdminHomePage() {
 
   return (
     <main className="mx-auto w-full max-w-4xl space-y-6 p-6">
-      <h1 className="text-2xl font-semibold tracking-tight">Admin</h1>
+      <header>
+        <h1 className="text-2xl font-semibold tracking-tight">Admin</h1>
+        <p className="text-sm text-muted-foreground">
+          Workspace, user, and content overview.
+        </p>
+      </header>
 
       <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {tiles.map((t) => (
           <li key={t.label}>
             {t.href ? (
-              <Link
-                href={t.href}
-                className="block rounded-lg border p-4 transition hover:bg-accent"
-              >
-                <Tile {...t} />
+              <Link href={t.href} className="block">
+                <StatCard {...t} interactive />
               </Link>
             ) : (
-              <div className="rounded-lg border p-4">
-                <Tile {...t} />
-              </div>
+              <StatCard {...t} />
             )}
           </li>
         ))}
       </ul>
 
-      <section className="space-y-2">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-          Quick links
-        </h2>
-        <ul className="space-y-1 text-sm">
-          <li>
-            <Link href="/admin/upload" className="text-primary hover:underline">
-              Upload documents
-            </Link>
-          </li>
-          <li>
-            <Link href="/admin/audit" className="text-primary hover:underline">
-              View audit log
-            </Link>
-          </li>
-          <li>
-            <a
+      <Card>
+        <CardHeader>
+          <CardTitle>Quick links</CardTitle>
+          <CardDescription>Common admin shortcuts.</CardDescription>
+        </CardHeader>
+        <CardContent className="pt-0">
+          <ul className="divide-y divide-border text-sm">
+            <QuickLink href="/admin/upload" label="Upload documents" />
+            <QuickLink href="/admin/audit" label="View audit log" />
+            <QuickLink
               href="https://openrouter.ai/activity"
-              target="_blank"
-              rel="noreferrer"
-              className="text-primary hover:underline"
-            >
-              OpenRouter usage dashboard ↗
-            </a>
-          </li>
-        </ul>
-      </section>
+              label="OpenRouter usage dashboard"
+              external
+            />
+          </ul>
+        </CardContent>
+      </Card>
     </main>
   );
 }
 
-function Tile({ label, value }: { label: string; value: number | string }) {
+function StatCard({
+  label,
+  value,
+  interactive,
+}: {
+  label: string;
+  value: number | string;
+  interactive?: boolean;
+}) {
   return (
-    <>
-      <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
+    <Card
+      className={
+        interactive
+          ? "p-4 transition-colors hover:bg-accent"
+          : "p-4"
+      }
+    >
+      <p className="text-xs uppercase tracking-wide text-muted-foreground">
+        {label}
+      </p>
       <p className="mt-1 text-2xl font-semibold">{value}</p>
-    </>
+    </Card>
+  );
+}
+
+function QuickLink({
+  href,
+  label,
+  external,
+}: {
+  href: string;
+  label: string;
+  external?: boolean;
+}) {
+  const className =
+    "flex items-center justify-between py-2 text-foreground transition-colors hover:text-primary";
+  const icon = external ? (
+    <ExternalLink className="size-3.5 text-muted-foreground" />
+  ) : (
+    <ChevronRight className="size-3.5 text-muted-foreground" />
+  );
+  return (
+    <li>
+      {external ? (
+        <a
+          href={href}
+          target="_blank"
+          rel="noreferrer"
+          className={className}
+        >
+          <span>{label}</span>
+          {icon}
+        </a>
+      ) : (
+        <Link href={href} className={className}>
+          <span>{label}</span>
+          {icon}
+        </Link>
+      )}
+    </li>
   );
 }

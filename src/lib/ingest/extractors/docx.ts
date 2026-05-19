@@ -1,6 +1,7 @@
 import mammoth from "mammoth";
 import TurndownService from "turndown";
 import type { Extracted, ExtractedImage } from "../types";
+import { cleanTitle } from "./md";
 
 const turndown = new TurndownService({
   headingStyle: "atx",
@@ -69,7 +70,9 @@ export async function extractDocx(
   );
   const markdown = turndown.turndown(html).replace(/\r\n/g, "\n").trim();
 
-  const title = extractFirstHeading(markdown) || stripExt(filename);
+  const rawH1 = extractFirstHeading(markdown);
+  const cleaned = rawH1 ? cleanTitle(rawH1) : null;
+  const title = cleaned || stripExt(filename);
 
   return {
     markdown,

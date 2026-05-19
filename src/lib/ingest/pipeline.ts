@@ -34,7 +34,28 @@ export type IngestOptions = {
   tags?: string[];
   /** What to do when (space_id, path) already exists. */
   conflict?: "replace" | "skip" | "version";
+  /**
+   * Optional folder path inside the destination space. Prefixed onto every
+   * document's path (including entries inside an uploaded zip), so users can
+   * import a vault into a sub-folder without flattening its structure.
+   * Leading/trailing slashes are stripped; empty means "space root".
+   */
+  targetFolder?: string;
 };
+
+function normalizeTargetFolder(raw: string | undefined): string {
+  if (!raw) return "";
+  const trimmed = raw.trim().replace(/^\/+|\/+$/g, "");
+  return trimmed
+    .split("/")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .join("/");
+}
+
+function joinFolder(folder: string, rest: string): string {
+  return folder ? `${folder}/${rest}` : rest;
+}
 
 export async function ingestUpload(
   file: UploadFile,
@@ -42,13 +63,14 @@ export async function ingestUpload(
 ): Promise<IngestResult[]> {
   const tier = tierFor(file.filename);
   const ext = extensionOf(file.filename);
+  const targetFolder = normalizeTargetFolder(opts.targetFolder);
 
   if (tier === "metadata_only") {
-    return [await ingestMetadataOnly(file, opts)];
+    return [await ingestMetadataOnly(file, opts, targetFolder)];
   }
 
   if (ext === ".zip") {
-    return ingestZip(file, opts);
+    return ingestZip(file, opts, targetFolder);
   }
 
   // .md / .markdown / .txt / .docx
@@ -59,7 +81,7 @@ export async function ingestUpload(
       ? await extractDocx(file.buffer, file.filename)
       : extractMarkdown(file.buffer, file.filename);
 
-  const treePath = stripExt(file.filename);
+  const treePath = joinFolder(targetFolder, stripExt(file.filename));
   const result = await ingestIndexed({
     spaceId: opts.spaceId,
     uploaderId: opts.uploaderId,
@@ -79,6 +101,7 @@ export async function ingestUpload(
 async function ingestZip(
   file: UploadFile,
   opts: IngestOptions,
+  targetFolder: string,
 ): Promise<IngestResult[]> {
   const { entries, skipped } = await extractZip(file.buffer);
   const results: IngestResult[] = [];
@@ -90,7 +113,7 @@ async function ingestZip(
       uploaderId: opts.uploaderId,
       tags: opts.tags ?? [],
       conflict: opts.conflict ?? "replace",
-      path: entry.path,
+      path: joinFolder(targetFolder, entry.path),
       filename: entry.filename,
       sourceFormat: entry.sourceFormat,
       // No per-file buffer is meaningful to store as the "original" — keep the zip itself.
@@ -124,6 +147,7 @@ async function ingestZip(
 async function ingestMetadataOnly(
   file: UploadFile,
   opts: IngestOptions,
+  targetFolder: string,
 ): Promise<IngestResult> {
   const admin = createServiceClient();
   const documentId = crypto.randomUUID();
@@ -137,7 +161,7 @@ async function ingestMetadataOnly(
     });
   if (upErr) throw new Error(`storage upload failed: ${upErr.message}`);
 
-  const path = stripExt(file.filename);
+  const path = joinFolder(targetFolder, stripExt(file.filename));
   const { data, error } = await admin
     .from("documents")
     .upsert(

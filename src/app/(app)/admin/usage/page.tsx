@@ -9,6 +9,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 
 export const dynamic = "force-dynamic";
 
@@ -43,65 +50,72 @@ export default async function UsagePage() {
   return (
     <main className="mx-auto w-full max-w-3xl space-y-6 p-6">
       <header>
-        <h1 className="text-2xl font-semibold">Usage</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Usage</h1>
         <p className="text-sm text-muted-foreground">
-          Chat usage over the last 14 days. Daily cap per user: {env.chatDailyLimit}. Monthly
-          OpenRouter spend ceiling: ${env.monthlySpendCeiling}.
+          Chat usage over the last 14 days. Daily cap per user:{" "}
+          {env.chatDailyLimit}. Monthly OpenRouter spend ceiling: $
+          {env.monthlySpendCeiling}.
         </p>
       </header>
 
-      <div className="rounded-lg border p-4">
-        <p className="text-xs uppercase tracking-wide text-muted-foreground">
-          OpenRouter
-        </p>
-        <p className="mt-1 text-sm">
-          Live spend and per-model breakdown live in the OpenRouter dashboard.
-        </p>
-        <Button
-          className="mt-3"
-          size="sm"
-          variant="outline"
-          nativeButton={false}
-          render={
-            <a
-              href="https://openrouter.ai/activity"
-              target="_blank"
-              rel="noreferrer"
-            />
-          }
-        >
-          Open OpenRouter dashboard ↗
-        </Button>
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>OpenRouter</CardTitle>
+          <CardDescription>
+            Live spend and per-model breakdown live in the OpenRouter dashboard.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="pt-0">
+          <Button
+            size="sm"
+            variant="outline"
+            nativeButton={false}
+            render={
+              <a
+                href="https://openrouter.ai/activity"
+                target="_blank"
+                rel="noreferrer"
+              />
+            }
+          >
+            Open OpenRouter dashboard ↗
+          </Button>
+        </CardContent>
+      </Card>
 
-      <section>
-        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-          Per-user chat messages (14d)
-        </h2>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>User</TableHead>
-              <TableHead className="text-right">Messages</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {rows.map((r) => (
-              <TableRow key={r.id}>
-                <TableCell>{r.email}</TableCell>
-                <TableCell className="text-right">{r.count}</TableCell>
-              </TableRow>
-            ))}
-            {rows.length === 0 && (
+      <Card>
+        <CardHeader>
+          <CardTitle>Per-user chat messages (14d)</CardTitle>
+        </CardHeader>
+        <CardContent className="pt-0">
+          <Table>
+            <TableHeader>
               <TableRow>
-                <TableCell colSpan={2} className="text-center text-sm text-muted-foreground">
-                  No chat activity in the last 14 days.
-                </TableCell>
+                <TableHead>User</TableHead>
+                <TableHead className="text-right">Messages</TableHead>
               </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </section>
+            </TableHeader>
+            <TableBody>
+              {rows.map((r) => (
+                <TableRow key={r.id}>
+                  <TableCell>{r.email}</TableCell>
+                  <TableCell className="text-right">{r.count}</TableCell>
+                </TableRow>
+              ))}
+              {rows.length === 0 && (
+                <TableRow>
+                  <TableCell
+                    colSpan={2}
+                    className="text-center text-sm text-muted-foreground"
+                  >
+                    No chat activity in the last 14 days.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
     </main>
   );
 }

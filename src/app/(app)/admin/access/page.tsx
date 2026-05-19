@@ -1,4 +1,11 @@
 import { createServiceClient } from "@/lib/supabase/server";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { AccessMatrix } from "./access-matrix";
 
 export const dynamic = "force-dynamic";
@@ -14,16 +21,27 @@ export default async function AccessAdminPage() {
   return (
     <main className="mx-auto w-full max-w-6xl space-y-6 p-6">
       <header>
-        <h1 className="text-2xl font-semibold">Access</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Access</h1>
         <p className="text-sm text-muted-foreground">
           Per-space role-based access. Set role to <em>none</em> to revoke.
         </p>
       </header>
-      <AccessMatrix
-        users={users ?? []}
-        spaces={spaces ?? []}
-        grants={rows ?? []}
-      />
+
+      <Card>
+        <CardHeader>
+          <CardTitle>User × space matrix</CardTitle>
+          <CardDescription>
+            Changes save automatically.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="pt-0">
+          <AccessMatrix
+            users={users ?? []}
+            spaces={spaces ?? []}
+            grants={rows ?? []}
+          />
+        </CardContent>
+      </Card>
     </main>
   );
 }

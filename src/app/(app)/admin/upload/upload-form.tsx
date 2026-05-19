@@ -25,17 +25,30 @@ type UploadResult = {
   message?: string;
 };
 
+type SpaceWithFolders = { id: string; name: string; folders: string[] };
+
 export function UploadForm({
   spaces,
 }: {
-  spaces: Array<{ id: string; name: string }>;
+  spaces: SpaceWithFolders[];
 }) {
   const [spaceId, setSpaceId] = useState<string>(spaces[0]?.id ?? "");
   const [files, setFiles] = useState<File[]>([]);
   const [tags, setTags] = useState("");
   const [conflict, setConflict] = useState<"replace" | "skip" | "version">("replace");
+  const [targetFolder, setTargetFolder] = useState<string>("");
   const [busy, setBusy] = useState(false);
   const [results, setResults] = useState<UploadResult[]>([]);
+
+  const folderSuggestions =
+    spaces.find((s) => s.id === spaceId)?.folders ?? [];
+
+  // Reset the folder field when the destination space changes — folders from
+  // a different space wouldn't apply.
+  const onSpaceChange = (v: string) => {
+    setSpaceId(v);
+    setTargetFolder("");
+  };
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -52,6 +65,7 @@ export function UploadForm({
       fd.set("spaceId", spaceId);
       fd.set("tags", JSON.stringify(tagList));
       fd.set("conflict", conflict);
+      fd.set("targetFolder", targetFolder.trim());
 
       const resp = await fetch("/api/admin/upload", { method: "POST", body: fd });
       if (!resp.ok) {
@@ -75,7 +89,7 @@ export function UploadForm({
     <form onSubmit={onSubmit} className="space-y-5">
       <div className="space-y-2">
         <Label>Destination space</Label>
-        <Select value={spaceId} onValueChange={(v) => v && setSpaceId(v)}>
+        <Select value={spaceId} onValueChange={(v) => v && onSpaceChange(v)}>
           <SelectTrigger>
             <SelectValue placeholder="Choose a space" />
           </SelectTrigger>
@@ -87,6 +101,28 @@ export function UploadForm({
             ))}
           </SelectContent>
         </Select>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="targetFolder">
+          Target folder <span className="text-muted-foreground">(optional)</span>
+        </Label>
+        <Input
+          id="targetFolder"
+          list="upload-folder-suggestions"
+          value={targetFolder}
+          onChange={(e) => setTargetFolder(e.target.value)}
+          placeholder="Leave empty for workspace root, or e.g. Notes/Meetings"
+        />
+        <datalist id="upload-folder-suggestions">
+          {folderSuggestions.map((f) => (
+            <option key={f} value={f} />
+          ))}
+        </datalist>
+        <p className="text-xs text-muted-foreground">
+          Files (and any folder structure inside an uploaded zip) are placed
+          under this path.
+        </p>
       </div>
 
       <div className="space-y-2">

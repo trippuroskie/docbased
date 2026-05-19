@@ -65,7 +65,27 @@ export async function extractZip(buffer: Buffer): Promise<ZipResult> {
     }
   }
 
+  disambiguateTitles(entries);
+
   return { entries, skipped };
+}
+
+/**
+ * Obsidian-style vaults often share boilerplate H1s across many notes (e.g.
+ * every daily note starts with `# To do`). The first-heading-as-title heuristic
+ * then produces N documents with identical titles. When that happens, prefer
+ * the filename for the colliding entries — it's almost always the real title.
+ */
+function disambiguateTitles(entries: ZipEntry[]) {
+  const counts = new Map<string, number>();
+  for (const e of entries) {
+    counts.set(e.extracted.title, (counts.get(e.extracted.title) ?? 0) + 1);
+  }
+  for (const e of entries) {
+    if ((counts.get(e.extracted.title) ?? 0) > 1) {
+      e.extracted.title = stripExt(e.filename);
+    }
+  }
 }
 
 function stripExt(name: string): string {

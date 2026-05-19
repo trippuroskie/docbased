@@ -10,7 +10,7 @@ import { toast } from "sonner";
 
 type Space = { id: string; slug: string; name: string; description: string | null };
 
-export function SpacesManager({ initial }: { initial: Space[] }) {
+export function CreateSpaceForm() {
   const router = useRouter();
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
@@ -41,8 +41,43 @@ export function SpacesManager({ initial }: { initial: Space[] }) {
     }
   };
 
+  return (
+    <form onSubmit={create} className="grid gap-3 sm:grid-cols-2">
+      <div className="space-y-2">
+        <Label>Name</Label>
+        <Input value={name} onChange={(e) => setName(e.target.value)} required />
+      </div>
+      <div className="space-y-2">
+        <Label>Slug</Label>
+        <Input
+          value={slug}
+          onChange={(e) => setSlug(e.target.value)}
+          placeholder={slugify(name)}
+        />
+      </div>
+      <div className="space-y-2 sm:col-span-2">
+        <Label>Description</Label>
+        <Textarea
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          rows={2}
+        />
+      </div>
+      <div className="sm:col-span-2">
+        <Button type="submit" disabled={busy || !name}>
+          Create space
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+export function SpacesList({ spaces }: { spaces: Space[] }) {
+  const router = useRouter();
+
   const remove = async (id: string, name: string) => {
-    if (!confirm(`Delete space "${name}"? This soft-deletes all its documents.`)) return;
+    if (!confirm(`Delete space "${name}"? This soft-deletes all its documents.`))
+      return;
     const resp = await fetch(`/api/admin/spaces/${id}`, { method: "DELETE" });
     if (resp.ok) {
       toast.success("Deleted");
@@ -52,53 +87,38 @@ export function SpacesManager({ initial }: { initial: Space[] }) {
     }
   };
 
-  return (
-    <div className="space-y-6">
-      <form onSubmit={create} className="grid gap-3 rounded-lg border p-4 sm:grid-cols-2">
-        <div className="space-y-2">
-          <Label>Name</Label>
-          <Input value={name} onChange={(e) => setName(e.target.value)} required />
-        </div>
-        <div className="space-y-2">
-          <Label>Slug</Label>
-          <Input
-            value={slug}
-            onChange={(e) => setSlug(e.target.value)}
-            placeholder={slugify(name)}
-          />
-        </div>
-        <div className="space-y-2 sm:col-span-2">
-          <Label>Description</Label>
-          <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
-        </div>
-        <div className="sm:col-span-2">
-          <Button type="submit" disabled={busy || !name}>
-            Create space
-          </Button>
-        </div>
-      </form>
+  if (spaces.length === 0) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        No spaces yet — create one above.
+      </p>
+    );
+  }
 
-      <ul className="divide-y rounded-lg border">
-        {initial.map((s) => (
-          <li key={s.id} className="flex items-center justify-between gap-3 p-3">
-            <div className="min-w-0">
-              <p className="font-medium">{s.name}</p>
-              <p className="truncate text-xs text-muted-foreground">
-                /{s.slug} · {s.description ?? "—"}
-              </p>
-            </div>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="text-destructive"
-              onClick={() => remove(s.id, s.name)}
-            >
-              Delete
-            </Button>
-          </li>
-        ))}
-      </ul>
-    </div>
+  return (
+    <ul className="divide-y divide-border -mx-4 -mb-4">
+      {spaces.map((s) => (
+        <li
+          key={s.id}
+          className="flex items-center justify-between gap-3 px-4 py-3"
+        >
+          <div className="min-w-0">
+            <p className="font-medium">{s.name}</p>
+            <p className="truncate text-xs text-muted-foreground">
+              /{s.slug} · {s.description ?? "—"}
+            </p>
+          </div>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="text-destructive"
+            onClick={() => remove(s.id, s.name)}
+          >
+            Delete
+          </Button>
+        </li>
+      ))}
+    </ul>
   );
 }
 

@@ -1,4 +1,11 @@
 import { createServiceClient } from "@/lib/supabase/server";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { InviteForm } from "./invite-form";
 import { UsersTable } from "./users-table";
 
@@ -28,19 +35,44 @@ export default async function UsersAdminPage() {
   return (
     <main className="mx-auto w-full max-w-4xl space-y-6 p-6">
       <header>
-        <h1 className="text-2xl font-semibold">Users</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Users</h1>
+        <p className="text-sm text-muted-foreground">
+          Invite teammates and manage admin privileges.
+        </p>
       </header>
-      <InviteForm spaces={(spaces ?? []).map((s) => ({ id: s.id, name: s.name }))} />
-      <UsersTable
-        users={(users ?? []).map((u) => ({
-          id: u.id,
-          email: u.email,
-          displayName: u.display_name,
-          isAdmin: !!u.is_admin,
-          createdAt: u.created_at,
-          lastSignInAt: lastSignIn.get(u.id) ?? null,
-        }))}
-      />
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Invite a user</CardTitle>
+          <CardDescription>
+            New users receive an email invite. Optionally grant them initial
+            access to a space.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="pt-0">
+          <InviteForm
+            spaces={(spaces ?? []).map((s) => ({ id: s.id, name: s.name }))}
+          />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>All users</CardTitle>
+        </CardHeader>
+        <CardContent className="pt-0">
+          <UsersTable
+            users={(users ?? []).map((u) => ({
+              id: u.id,
+              email: u.email,
+              displayName: u.display_name,
+              isAdmin: !!u.is_admin,
+              createdAt: u.created_at,
+              lastSignInAt: lastSignIn.get(u.id) ?? null,
+            }))}
+          />
+        </CardContent>
+      </Card>
     </main>
   );
 }

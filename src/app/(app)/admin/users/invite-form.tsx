@@ -46,7 +46,7 @@ export function InviteForm({ spaces }: { spaces: Array<{ id: string; name: strin
   };
 
   return (
-    <form onSubmit={onSubmit} className="grid gap-3 rounded-lg border p-4 sm:grid-cols-2">
+    <form onSubmit={onSubmit} className="grid gap-3 sm:grid-cols-2">
       <div className="space-y-2 sm:col-span-2">
         <Label>Email</Label>
         <Input
