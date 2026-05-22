@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { CheckCircle2, FileText, Loader2, Paperclip } from "lucide-react";
+import { useMemo, useState } from "react";
+import { CheckCircle2, FileText, ImageIcon, Loader2, Paperclip } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,6 +15,19 @@ import {
 import { toast } from "sonner";
 
 const TIER_1_EXTS = new Set([".md", ".markdown", ".txt", ".zip", ".docx"]);
+const IMAGE_EXTS = new Set([
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".gif",
+  ".webp",
+  ".bmp",
+  ".svg",
+  ".tiff",
+  ".tif",
+  ".avif",
+]);
+const ASSET_HOST_EXTS = new Set([".md", ".markdown"]);
 
 type UploadResult = {
   documentId: string;
@@ -25,7 +38,56 @@ type UploadResult = {
   message?: string;
 };
 
+type UploadGroup = {
+  primary: File;
+  assets: File[];
+};
+
 type SpaceWithFolders = { id: string; name: string; folders: string[] };
+
+function extOf(name: string): string {
+  const i = name.lastIndexOf(".");
+  return i === -1 ? "" : name.slice(i).toLowerCase();
+}
+
+function classifyFile(name: string): "primary" | "image" | "other" {
+  const ext = extOf(name);
+  if (TIER_1_EXTS.has(ext)) return "primary";
+  if (IMAGE_EXTS.has(ext)) return "image";
+  return "other";
+}
+
+/**
+ * Group selected files into upload requests.
+ *
+ * If the selection contains at least one markdown file alongside image files,
+ * the images are attached to the FIRST markdown file as `_assets/...`. Every
+ * other primary file (other markdown files, .docx, .txt, .zip) is uploaded as
+ * its own request — same as before.
+ *
+ * Stray images with no markdown host fall through as `metadata_only` uploads,
+ * which preserves the previous behavior.
+ */
+function planUpload(files: File[]): UploadGroup[] {
+  if (files.length === 0) return [];
+
+  const markdownHost = files.find(
+    (f) => ASSET_HOST_EXTS.has(extOf(f.name)),
+  );
+  const images = files.filter((f) => classifyFile(f.name) === "image");
+
+  if (markdownHost && images.length > 0) {
+    const groups: UploadGroup[] = [{ primary: markdownHost, assets: images }];
+    for (const f of files) {
+      if (f === markdownHost) continue;
+      if (classifyFile(f.name) === "image") continue; // already attached
+      groups.push({ primary: f, assets: [] });
+    }
+    return groups;
+  }
+
+  return files.map((f) => ({ primary: f, assets: [] as File[] }));
+}
 
 export function UploadForm({
   spaces,
@@ -43,6 +105,10 @@ export function UploadForm({
   const folderSuggestions =
     spaces.find((s) => s.id === spaceId)?.folders ?? [];
 
+  const groups = useMemo(() => planUpload(files), [files]);
+  const bundledHost = groups.find((g) => g.assets.length > 0)?.primary.name;
+  const totalAssets = groups.reduce((acc, g) => acc + g.assets.length, 0);
+
   // Reset the folder field when the destination space changes — folders from
   // a different space wouldn't apply.
   const onSpaceChange = (v: string) => {
@@ -59,18 +125,19 @@ export function UploadForm({
     const tagList = tags.split(",").map((t) => t.trim()).filter(Boolean);
     const aggregated: UploadResult[] = [];
 
-    for (const file of files) {
+    for (const group of groups) {
       const fd = new FormData();
-      fd.set("file", file);
+      fd.set("file", group.primary);
       fd.set("spaceId", spaceId);
       fd.set("tags", JSON.stringify(tagList));
       fd.set("conflict", conflict);
       fd.set("targetFolder", targetFolder.trim());
+      for (const a of group.assets) fd.append("assets", a);
 
       const resp = await fetch("/api/admin/upload", { method: "POST", body: fd });
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({}));
-        toast.error(`${file.name}: ${err.error ?? resp.statusText}`);
+        toast.error(`${group.primary.name}: ${err.error ?? resp.statusText}`);
         continue;
       }
       const data = (await resp.json()) as { results: UploadResult[] };
@@ -131,28 +198,45 @@ export function UploadForm({
           type="file"
           multiple
           onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
-          accept=".md,.markdown,.txt,.zip,.pdf,.docx,.pptx,.xlsx"
+          accept=".md,.markdown,.txt,.zip,.pdf,.docx,.pptx,.xlsx,.png,.jpg,.jpeg,.gif,.webp,.bmp,.svg,.tiff,.tif,.avif"
         />
         {files.length > 0 && (
           <ul className="space-y-1 text-xs">
             {files.map((f) => {
-              const ext = `.${f.name.split(".").pop()?.toLowerCase()}`;
+              const kind = classifyFile(f.name);
+              const ext = extOf(f.name);
               const tier1 = TIER_1_EXTS.has(ext);
+              const isAttached = kind === "image" && bundledHost;
               return (
                 <li key={f.name} className="flex items-center gap-2">
-                  {tier1 ? (
+                  {kind === "image" ? (
+                    <ImageIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                  ) : tier1 ? (
                     <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
                   ) : (
                     <Paperclip className="h-3.5 w-3.5 text-muted-foreground" />
                   )}
                   <span className="truncate">{f.name}</span>
                   <span className="text-muted-foreground">
-                    {tier1 ? "indexed" : "metadata only"}
+                    {isAttached
+                      ? `asset → ${bundledHost}`
+                      : tier1
+                      ? "indexed"
+                      : kind === "image"
+                      ? "image (no markdown to attach to)"
+                      : "metadata only"}
                   </span>
                 </li>
               );
             })}
           </ul>
+        )}
+        {bundledHost && (
+          <p className="text-xs text-muted-foreground">
+            Images will be uploaded as assets of <span className="font-mono">{bundledHost}</span> and
+            inline <span className="font-mono">![…](filename.png)</span> references
+            in the markdown will resolve to them.
+          </p>
         )}
       </div>
 
@@ -180,7 +264,11 @@ export function UploadForm({
 
       <Button type="submit" disabled={busy || files.length === 0 || !spaceId}>
         {busy ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
-        {busy ? "Uploading…" : `Upload ${files.length} file${files.length === 1 ? "" : "s"}`}
+        {busy
+          ? "Uploading…"
+          : `Upload ${groups.length} document${groups.length === 1 ? "" : "s"}${
+              totalAssets ? ` (+${totalAssets} asset${totalAssets === 1 ? "" : "s"})` : ""
+            }`}
       </Button>
 
       {results.length > 0 && (

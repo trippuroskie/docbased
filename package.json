@@ -13,6 +13,7 @@
     "loginlink": "tsx scripts/loginlink.ts",
     "setpassword": "tsx scripts/setpassword.ts",
     "backup": "tsx scripts/backup.ts",
+    "upload-obsidian": "tsx scripts/upload-obsidian-note.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

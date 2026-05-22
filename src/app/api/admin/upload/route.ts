@@ -30,6 +30,7 @@ export async function POST(request: Request) {
   const tagsRaw = form.get("tags") as string | null;
   const conflict = (form.get("conflict") as string | null) ?? "replace";
   const targetFolder = (form.get("targetFolder") as string | null) ?? "";
+  const assetFiles = form.getAll("assets").filter((v): v is File => v instanceof File);
 
   if (!file || !spaceId) {
     return NextResponse.json({ error: "missing_fields" }, { status: 400 });
@@ -38,9 +39,28 @@ export async function POST(request: Request) {
   const tags = tagsRaw ? (JSON.parse(tagsRaw) as string[]) : [];
   const buf = Buffer.from(await file.arrayBuffer());
 
+  const assets = await Promise.all(
+    assetFiles.map(async (af) => ({
+      filename: af.name,
+      buffer: Buffer.from(await af.arrayBuffer()),
+      contentType: af.type || "application/octet-stream",
+    })),
+  );
+
+  console.log("[upload]", {
+    file: file.name,
+    bytes: buf.length,
+    assets: assets.map((a) => ({ name: a.filename, bytes: a.buffer.length })),
+  });
+
   try {
     const results = await ingestUpload(
-      { filename: file.name, buffer: buf, mimeType: file.type },
+      {
+        filename: file.name,
+        buffer: buf,
+        mimeType: file.type,
+        assets: assets.length ? assets : undefined,
+      },
       {
         spaceId,
         uploaderId: user.id,

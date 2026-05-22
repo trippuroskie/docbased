@@ -79,7 +79,7 @@ export async function ingestUpload(
       ? extractText(file.buffer, file.filename)
       : ext === ".docx"
       ? await extractDocx(file.buffer, file.filename)
-      : extractMarkdown(file.buffer, file.filename);
+      : extractMarkdown(file.buffer, file.filename, file.assets);
 
   const treePath = joinFolder(targetFolder, stripExt(file.filename));
   const result = await ingestIndexed({

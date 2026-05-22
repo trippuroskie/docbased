@@ -15,10 +15,23 @@ export type Extracted = {
   images?: ExtractedImage[];
 };
 
+export type UploadAsset = {
+  filename: string;
+  buffer: Buffer;
+  contentType: string;
+};
+
 export type UploadFile = {
   filename: string;
   buffer: Buffer;
   mimeType?: string;
+  /**
+   * Companion files that should travel with this document (e.g. images
+   * referenced by a markdown file). Used by the markdown extractor to rewrite
+   * `![](filename.png)` references to `_assets/filename.png` and attach the
+   * image binaries for upload.
+   */
+  assets?: UploadAsset[];
 };
 
 export const TIER_1_EXTENSIONS = new Set([

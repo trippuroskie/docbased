@@ -2,7 +2,7 @@ import JSZip from "jszip";
 import { extractMarkdown } from "./md";
 import { extractText } from "./txt";
 import { extractDocx } from "./docx";
-import { extensionOf, type Extracted } from "../types";
+import { extensionOf, type Extracted, type UploadAsset } from "../types";
 
 export type ZipEntry = {
   /** Folder path inside the zip, used for the document tree (e.g. "Networking/VLANs/Site VPN"). */
@@ -17,18 +17,56 @@ export type ZipResult = {
   skipped: { name: string; reason: string }[];
 };
 
+const IMAGE_EXTS = new Set([
+  ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg",
+  ".tif", ".tiff", ".avif",
+]);
+
+const CONTENT_TYPE_BY_EXT: Record<string, string> = {
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".webp": "image/webp",
+  ".bmp": "image/bmp",
+  ".svg": "image/svg+xml",
+  ".tif": "image/tiff",
+  ".tiff": "image/tiff",
+  ".avif": "image/avif",
+};
+
 export async function extractZip(buffer: Buffer): Promise<ZipResult> {
   const zip = await JSZip.loadAsync(buffer);
   const entries: ZipEntry[] = [];
   const skipped: { name: string; reason: string }[] = [];
 
+  // Pass 1: collect candidate image assets from the zip. We match them to
+  // markdown entries by basename in pass 2, the same way the .md extractor
+  // does for direct multi-file uploads.
+  const imageAssets: UploadAsset[] = [];
   for (const [name, file] of Object.entries(zip.files)) {
     if (file.dir) continue;
-    // Skip macOS/Obsidian metadata noise.
-    if (name.includes("__MACOSX") || name.endsWith(".DS_Store")) continue;
-    if (name.startsWith(".obsidian/") || name.includes("/.obsidian/")) continue;
+    if (shouldSkipNoise(name)) continue;
+    const ext = extensionOf(name);
+    if (!IMAGE_EXTS.has(ext)) continue;
+    const baseName = name.split("/").pop() ?? name;
+    const buf = Buffer.from(await file.async("uint8array"));
+    imageAssets.push({
+      filename: baseName,
+      buffer: buf,
+      contentType: CONTENT_TYPE_BY_EXT[ext] ?? "application/octet-stream",
+    });
+  }
+
+  // Pass 2: process text entries, passing the image pool through to the
+  // markdown extractor so it can rewrite references and attach matched images.
+  for (const [name, file] of Object.entries(zip.files)) {
+    if (file.dir) continue;
+    if (shouldSkipNoise(name)) continue;
 
     const ext = extensionOf(name);
+    if (IMAGE_EXTS.has(ext)) continue; // handled in pass 1
+
     const innerBuf = Buffer.from(await file.async("uint8array"));
     const baseName = name.split("/").pop() ?? name;
     const folderPath = name.includes("/")
@@ -42,7 +80,7 @@ export async function extractZip(buffer: Buffer): Promise<ZipResult> {
       entries.push({
         path: treePath,
         filename: baseName,
-        extracted: extractMarkdown(innerBuf, baseName),
+        extracted: extractMarkdown(innerBuf, baseName, imageAssets),
         sourceFormat: "md",
       });
     } else if (ext === ".txt") {
@@ -68,6 +106,13 @@ export async function extractZip(buffer: Buffer): Promise<ZipResult> {
   disambiguateTitles(entries);
 
   return { entries, skipped };
+}
+
+function shouldSkipNoise(name: string): boolean {
+  // Skip macOS / Obsidian metadata noise.
+  if (name.includes("__MACOSX") || name.endsWith(".DS_Store")) return true;
+  if (name.startsWith(".obsidian/") || name.includes("/.obsidian/")) return true;
+  return false;
 }
 
 /**
