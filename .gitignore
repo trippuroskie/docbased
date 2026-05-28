@@ -2,6 +2,7 @@
 
 # dependencies
 /node_modules
+**/node_modules/
 /.pnp
 .pnp.*
 .yarn/*
@@ -9,6 +10,12 @@
 !.yarn/plugins
 !.yarn/releases
 !.yarn/versions
+
+# workspace package build artifacts
+packages/*/dist/
+
+# fumadocs generated content cache
+/.source/
 
 # testing
 /coverage

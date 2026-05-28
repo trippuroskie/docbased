@@ -1,0 +1,24 @@
+---
+title: Resources
+description: docbased://space/{slug} and docbased://document/{id}.
+---
+
+Resources are passive, addressable URIs. Unlike tools, the model doesn't call them — the **user** picks them in the MCP client (e.g. Claude Desktop's `@`-mention attachments). They're cheap to add and a big UX win.
+
+## docbased://space/&#123;slug&#125;
+
+Table of contents for one space. Returns up to 100 documents with title, path, last-edited timestamp, and id. If the space has more than 100 docs, a tail line points at `list_documents` with a cursor.
+
+```
+docbased://space/it
+```
+
+## docbased://document/&#123;id&#125;
+
+Full markdown body and metadata for one document.
+
+```
+docbased://document/7b9ff5eb-993e-48e7-847a-f43ba3b3e60a
+```
+
+For binary documents (status `metadata_only`), only metadata is returned with a note saying the body isn't indexed.

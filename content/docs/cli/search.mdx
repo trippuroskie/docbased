@@ -1,0 +1,34 @@
+---
+title: search
+description: Hybrid pgvector + FTS search, optionally reranked.
+---
+
+<ToolSpec
+  name="docbased search <query>"
+  summary="Embeds the query, calls the hybrid_search RPC, hydrates document metadata, and optionally reranks via Cohere."
+  params={[
+    { name: "query", type: "string", required: true, description: "Positional. Quote on shells with spaces." },
+    { name: "--space", type: "string", description: "Restrict to a single space slug (e.g. 'it')." },
+    { name: "--limit", type: "number", default: 20, description: "Max chunks to return." },
+    { name: "--rerank", type: "boolean", default: false, description: "Apply Cohere rerank to the top hits. Falls back to RRF on failure." },
+  ]}
+  returns={<>JSON: <code>{`{ query, count, hits: [{ chunkId, documentId, documentTitle, documentPath, spaceId, spaceName, headingPath[], content, score }] }`}</code></>}
+/>
+
+## Examples
+
+```bash
+npm run docbased -- search "power bi report" --space it --limit 5 --rerank
+```
+
+Text format prints each hit with its score, document, and a 200-char preview:
+
+```bash
+npm run docbased -- search "restart the service" --format text
+```
+
+## Notes
+
+- The embedding model is the user's saved preference, falling back to `EMBEDDING_MODEL` (default `openai/text-embedding-3-small`, 1536 dims).
+- Reranker model defaults to `cohere/rerank-3.5` via OpenRouter.
+- Reranker failures are silent — you get RRF order, never an error.

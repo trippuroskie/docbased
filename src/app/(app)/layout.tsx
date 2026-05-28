@@ -50,19 +50,24 @@ export default async function AppShellLayout({
     tree: trees[i],
   }));
 
-  // The root <body> is `overflow-hidden` so the chat hub's fixed three-pane
-  // layout doesn't induce page-level scroll. AppShell owns a flex-row with
-  // the sidebar on the left and a flex-col main area on the right. Plain
-  // pages (Settings, Admin, Upload, …) render scrollable content inside
-  // that main area; the hub renders an h-full child that exactly fills it.
+  // Lock this route group to viewport height with scroll suppression so the
+  // chat hub's fixed three-pane layout doesn't induce page-level scroll. The
+  // root <body> allows normal scroll for /docs and other non-app routes —
+  // this wrapper re-imposes the fixed-viewport model for /(app)/*. AppShell
+  // owns a flex-row with the sidebar on the left and a flex-col main area on
+  // the right; plain pages (Settings, Admin, …) render scrollable content
+  // inside that main area, and the hub renders an h-full child that exactly
+  // fills it.
   return (
-    <AppShell
-      spacesWithTrees={spacesWithTrees}
-      isAdmin={me?.is_admin ?? false}
-      userDisplayName={me?.display_name ?? null}
-      userEmail={me?.email ?? null}
-    >
-      {children}
-    </AppShell>
+    <div className="h-screen overflow-hidden">
+      <AppShell
+        spacesWithTrees={spacesWithTrees}
+        isAdmin={me?.is_admin ?? false}
+        userDisplayName={me?.display_name ?? null}
+        userEmail={me?.email ?? null}
+      >
+        {children}
+      </AppShell>
+    </div>
   );
 }

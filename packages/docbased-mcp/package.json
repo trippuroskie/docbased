@@ -1,0 +1,44 @@
+{
+  "name": "docbased-mcp",
+  "version": "0.1.0",
+  "description": "MCP server for the docbased knowledge hub — search docs, fetch chunks, list spaces.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "docbased-mcp": "./dist/index.mjs"
+  },
+  "main": "./dist/index.mjs",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "start": "node dist/index.mjs"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "docbased",
+    "rag",
+    "supabase",
+    "pgvector"
+  ],
+  "dependencies": {
+    "@supabase/supabase-js": "^2.105.4",
+    "fastmcp": "^3.18.0",
+    "openai": "^6.37.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "tsup": "^8.3.5",
+    "tsx": "^4.22.0",
+    "typescript": "^5"
+  }
+}

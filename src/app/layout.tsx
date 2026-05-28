@@ -27,9 +27,18 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} dark h-full antialiased bg-background`}
+      // Fumadocs's RootProvider (next-themes under the hood) injects
+      // `style="color-scheme: ..."` onto <html> after mount. Without this,
+      // hydration warns on every /docs page load.
+      suppressHydrationWarning
+      className={`${geistSans.variable} ${geistMono.variable} dark antialiased bg-background`}
     >
-      <body className="h-full overflow-hidden font-sans bg-background text-foreground">
+      {/*
+        Body allows normal page scroll so /docs (Fumadocs sticky sidebar +
+        normal scroll) works. The chat hub's fixed three-pane layout enforces
+        its own h-screen + overflow-hidden inside src/app/(app)/layout.tsx.
+      */}
+      <body className="min-h-screen font-sans bg-background text-foreground">
         <TooltipProvider>{children}</TooltipProvider>
         <Toaster richColors />
       </body>

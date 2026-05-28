@@ -1,0 +1,19 @@
+---
+title: docbased
+description: Internal docs search and RAG chat for your team's knowledge bases.
+---
+
+**docbased** is an internal knowledge hub. It indexes markdown, Word, PDF, and Obsidian-vault content into Supabase + pgvector, exposes a chat UI for RAG conversations, and offers programmatic access through a CLI and a published [Model Context Protocol](https://modelcontextprotocol.io) server.
+
+## What lives here
+
+- [Getting started](/docs/getting-started) — install, env setup, first ingest.
+- [Architecture](/docs/architecture) — how `core / web / CLI / MCP` fit together.
+- [CLI reference](/docs/cli) — `docbased spaces`, `docbased search`, `docbased ask`, …
+- [MCP server reference](/docs/mcp) — tools, resources, prompts; install snippet for Claude Code / Claude Desktop / Cursor.
+
+## What it's for
+
+- A search bar and chat over docs your team actually writes (Obsidian vault, Word runbooks, PDFs, internal Sisense → Power BI guides, etc.).
+- A primitive an LLM can call directly — give Claude / GPT / Gemini access to your knowledge base without scraping.
+- A clean substrate to build on (RAG fine-tuning, agentic workflows, ops automations).

@@ -1,0 +1,5 @@
+{
+  "title": "docbased",
+  "pages": ["index", "getting-started", "architecture", "---LLM access---", "cli", "mcp"],
+  "defaultOpen": true
+}

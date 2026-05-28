@@ -1,0 +1,5 @@
+{
+  "title": "MCP server",
+  "pages": ["index", "install", "cowork", "tools", "resources", "prompts"],
+  "defaultOpen": false
+}

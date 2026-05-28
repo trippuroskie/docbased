@@ -1,0 +1,36 @@
+---
+title: CLI overview
+description: docbased CLI — query the knowledge base from your terminal.
+---
+
+The CLI ships in-repo. Run it with `npm run docbased -- <command>` from the project root, or `npx tsx scripts/cli.ts <command>` if you want to skip npm's quote stripping.
+
+## Commands
+
+| Command | Purpose |
+|---|---|
+| [`spaces`](/docs/cli/spaces) | List accessible spaces |
+| [`search`](/docs/cli/search) | Hybrid search across the knowledge base |
+| [`doc`](/docs/cli/doc) | `doc get` / `doc list` — document reads |
+| [`chunk`](/docs/cli/chunk) | `chunk get` / `chunk neighbors` — chunk reads |
+| [`ask`](/docs/cli/ask) | One-shot RAG: search + answer in a single call |
+
+## Global flags
+
+| Flag | Default | Notes |
+|---|---|---|
+| `--format json\|text` | `json` (`text` for `ask`) | JSON is LLM-friendly; text is for humans. |
+| `-h`, `--help` | — | Print usage and exit. |
+
+## Auth modes
+
+The CLI reuses `resolveCaller()` from the [shared core](/docs/architecture#auth-three-ways). It picks the mode from env:
+
+- **service** (default) — `SUPABASE_SECRET_KEY` set → all spaces accessible.
+- **user** — additionally set `DOCBASED_EMAIL` + `DOCBASED_PASSWORD` → sign in and scope to `accessibleSpaceIds`. Override with `DOCBASED_MODE=service|user|auto`.
+
+## Output contract
+
+- JSON output goes to **stdout**.
+- Errors go to **stderr** as `{ "error": { "message": "..." } }` and exit `1`.
+- Diagnostic / dotenv logs (`◇ injected env…`) go to **stderr** — pipe stdout to `jq` without scrubbing.

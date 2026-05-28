@@ -1,0 +1,32 @@
+---
+title: MCP overview
+description: docbased-mcp — let Claude Code, Claude Desktop, Cursor, or any MCP client query your knowledge base.
+---
+
+`docbased-mcp` is a standalone npm package (in `packages/docbased-mcp/` in this monorepo) that exposes the docbased knowledge base over the [Model Context Protocol](https://modelcontextprotocol.io). It's built on [FastMCP](https://github.com/punkpeye/fastmcp) and supports stdio (default) and Streamable HTTP transports.
+
+## What it exposes
+
+- **Tools** — actions the model can call. See [tools](/docs/mcp/tools).
+- **Resources** — passive, addressable URIs the user can `@`-mention. See [resources](/docs/mcp/resources).
+- **Prompts** — slash-command templates. See [prompts](/docs/mcp/prompts).
+
+## Why search-only
+
+The MCP server exposes search and retrieval primitives — `search_documents`, `get_document`, `list_documents`, `list_spaces`, `get_chunk`, `get_chunk_neighbors`. It deliberately does **not** ship an `ask`/`answer` tool: the calling LLM (Claude, GPT, Gemini, …) already has reasoning; adding a second LLM hop inside an MCP tool costs more, is harder to debug, and removes the caller's control over the answer style.
+
+If you want a one-shot RAG roundtrip from the terminal, use [`docbased ask`](/docs/cli/ask) instead.
+
+## Quick start
+
+See [Install](/docs/mcp/install).
+
+## Compatibility
+
+| Client | Transport | Status |
+|---|---|---|
+| Claude Code | stdio | ✅ |
+| Claude Desktop | stdio | ✅ |
+| Cursor | stdio | ✅ |
+| Hosted clients | Streamable HTTP (`--http`) | 🛠️ Implemented but not yet stress-tested. |
+| Legacy HTTP+SSE | — | ❌ Deprecated in the MCP spec; not supported. |

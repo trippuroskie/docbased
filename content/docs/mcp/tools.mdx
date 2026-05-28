@@ -1,0 +1,68 @@
+---
+title: Tools
+description: search_documents, get_document, list_documents, list_spaces, get_chunk, get_chunk_neighbors.
+---
+
+<ToolSpec
+  name="search_documents"
+  summary="Hybrid pgvector + FTS search with optional Cohere rerank. Returns ranked chunks with title, path, space, ids, and a content preview."
+  params={[
+    { name: "query", type: "string", required: true, description: "Natural-language search query." },
+    { name: "space_slug", type: "string", description: "Restrict to a single space slug. Call list_spaces first to find slugs." },
+    { name: "limit", type: "integer (1–20)", default: 8, description: "Max chunks to return." },
+    { name: "rerank", type: "boolean", default: true, description: "Cohere rerank top hits; falls back to RRF on failure." },
+  ]}
+  returns="Markdown block listing each hit: title, heading path, score, document_id, chunk_id, and the chunk text (truncated to ~1500 chars with a follow-up hint pointing at get_chunk / get_document)."
+/>
+
+<ToolSpec
+  name="list_spaces"
+  summary="Enumerate spaces the caller can access. Slugs returned here are the input for every space_slug parameter."
+  returns="Markdown list of accessible spaces with name, slug, and description."
+/>
+
+<ToolSpec
+  name="list_documents"
+  summary="Paginated inventory of documents, most-recently-edited first."
+  params={[
+    { name: "space_slug", type: "string", description: "Restrict to one space." },
+    { name: "limit", type: "integer (1–100)", default: 25, description: "Page size." },
+    { name: "cursor", type: "string", description: "Opaque cursor from a previous response." },
+  ]}
+  returns="Markdown list with a trailing pagination hint (the literal text 'Call list_documents again with cursor=…'). LLMs ignore structured cursor fields, so the hint is in the visible output by design."
+/>
+
+<ToolSpec
+  name="get_document"
+  summary="Fetch the full markdown body of a single document by UUID or by space-slug/path."
+  params={[
+    { name: "ref", type: "string", required: true, description: "UUID, or 'space-slug/path' (e.g. 'it/Sisense to Power BI Migration Guide')." },
+  ]}
+  returns="Markdown — header with metadata + the raw body. For binary docs (status: metadata_only), returns metadata only."
+/>
+
+<ToolSpec
+  name="get_chunk"
+  summary="Fetch one chunk by UUID. Use after search_documents to read a hit in full when the preview was truncated."
+  params={[
+    { name: "chunk_id", type: "string (uuid)", required: true, description: "Chunk UUID from a search hit." },
+  ]}
+  returns="Markdown — chunk text with its heading path and parent document title."
+/>
+
+<ToolSpec
+  name="get_chunk_neighbors"
+  summary="Fetch chunks before/after a target chunk inside the same document. Useful for expanding context around a search hit."
+  params={[
+    { name: "chunk_id", type: "string (uuid)", required: true, description: "Chunk UUID to anchor on." },
+    { name: "window", type: "integer (0–5)", default: 1, description: "How many chunks to fetch on each side." },
+  ]}
+  returns="Markdown — the centered window of chunks, in document order."
+/>
+
+## Conventions
+
+- All names are `snake_case`.
+- All errors return `isError: true` with a human-readable message; tools never throw across the JSON-RPC boundary.
+- Chunk text is truncated to ~1500 chars in `search_documents`; the response tells the LLM how to fetch more.
+- Total tool output is capped at ~24 KB; if you hit that, narrow the query.

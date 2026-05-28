@@ -1,0 +1,35 @@
+---
+title: chunk
+description: Read a single chunk or its neighbors.
+---
+
+## chunk get
+
+<ToolSpec
+  name="docbased chunk get <id>"
+  summary="Fetch one chunk by UUID. Returns its text, heading path, and parent document title."
+  params={[
+    { name: "id", type: "string (uuid)", required: true, description: "Chunk UUID, typically from a search hit." },
+  ]}
+  returns={<>JSON: <code>{`{ chunk: { id, documentId, ordinal, content, headingPath[], spaceId, documentTitle } }`}</code></>}
+/>
+
+```bash
+npm run docbased -- chunk get e46d970b-2ca1-4ff4-a491-cb8eb16e440f --format text
+```
+
+## chunk neighbors
+
+<ToolSpec
+  name="docbased chunk neighbors <id>"
+  summary="Fetch the chunks before/after a target chunk in the same document — useful for context expansion around a search hit."
+  params={[
+    { name: "id", type: "string (uuid)", required: true, description: "Chunk UUID to anchor on." },
+    { name: "--window", type: "number", default: 1, description: "Chunks to fetch on each side (0-5)." },
+  ]}
+  returns={<>JSON: <code>{`{ count, chunks: [{ id, documentId, ordinal, content, headingPath[] }] }`}</code></>}
+/>
+
+```bash
+npm run docbased -- chunk neighbors <id> --window 2 --format text
+```

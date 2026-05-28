@@ -1,0 +1,58 @@
+---
+title: Architecture
+description: How the web app, CLI, MCP server, and shared core fit together.
+---
+
+## At a glance
+
+```
+                ┌─────────────────────────────┐
+                │   src/lib/core/             │  pure, Next-free
+                │   ├ search.ts  (searchCore) │  • no cookies
+                │   ├ docs.ts                 │  • no @/lib/env coupling
+                │   ├ auth.ts  (resolveCaller)│  • exported types are stable
+                │   ├ embed.ts                │
+                │   └ prompt.ts (system, citations)
+                └──────────┬──────────────────┘
+                           │
+        ┌──────────────────┼──────────────────────┐
+        │                  │                      │
+┌───────▼────────┐ ┌───────▼────────┐ ┌───────────▼──────────┐
+│  Web (Next 16) │ │  CLI           │ │  docbased-mcp        │
+│  /chat, /api/* │ │  scripts/cli.ts│ │  packages/docbased-  │
+│  /api/search   │ │  npm run       │ │      mcp (npm pkg)   │
+│  /docs (this!) │ │  docbased ...  │ │  stdio / HTTP        │
+└────────────────┘ └────────────────┘ └──────────────────────┘
+```
+
+All three consumers share **one** copy of the search, document fetch, embedding, and prompt-building logic. They differ only in how they resolve auth and how they render output.
+
+## Auth, three ways
+
+| Consumer | Auth | accessibleSpaceIds resolved by |
+|---|---|---|
+| **Web** | Supabase session cookie | [`getAccessibleSpaces()`](https://github.com/) — admin-aware, queries `space_access` for non-admins. |
+| **CLI / MCP — service** | `SUPABASE_SECRET_KEY` | All spaces. RLS bypassed. Intended for trusted-machine use. |
+| **CLI / MCP — user** | `DOCBASED_EMAIL` + `DOCBASED_PASSWORD` | Sign in via Supabase Auth, then resolve `accessibleSpaceIds` exactly as the web app does. Use when serving multiple humans. |
+
+All three converge on `accessibleSpaceIds: string[]` and a service-role Supabase client. The core's `searchCore` and `docs.ts` functions accept those as explicit arguments — they never call `getSession()`.
+
+This pattern works around a known bug in the project's `users` RLS policy: it self-references and silently returns null. See `AGENTS.md` for the long version.
+
+## Data flow — a search
+
+1. Caller resolves `accessibleSpaceIds` and a service-role Supabase client.
+2. Caller embeds the query using the user's preferred embedding model.
+3. `searchCore(supabase, query, { accessibleSpaceIds, queryEmbedding, … })` calls the `hybrid_search` Postgres RPC (pgvector cosine + FTS fused via RRF).
+4. Document metadata hydrates in one round-trip.
+5. (Optional) The top-N chunks pass through the Cohere reranker via OpenRouter; failures fall back to RRF order.
+
+## Ingest (not yet exposed to CLI/MCP)
+
+The ingest pipeline is web-only for now. See `src/lib/ingest/` if you want to add `docbased upload` / MCP `ingest_document`.
+
+## Why this shape
+
+- **One source of truth.** Bug fixes and feature additions in `searchCore` ship to every surface at once.
+- **No framework lock-in for the LLM-facing path.** The MCP server bundles `core/` at publish time and doesn't drag in Next or React.
+- **Next.js 16's "middleware" rename to `proxy.ts`** and async `cookies()` / `params` are quirks of the web layer only.

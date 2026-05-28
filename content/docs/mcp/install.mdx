@@ -1,0 +1,73 @@
+---
+title: Install
+description: Wire docbased-mcp into Claude Code, Claude Desktop, or Cursor.
+---
+
+## Build the server (local dev)
+
+```bash
+npm install
+npm run build --workspace docbased-mcp
+```
+
+This produces `packages/docbased-mcp/dist/index.mjs`, a single-file ESM bundle with a `#!/usr/bin/env node` shebang.
+
+## Client configuration
+
+### Claude Code (`.mcp.json` in your project root)
+
+```jsonc
+{
+  "mcpServers": {
+    "docbased": {
+      "command": "node",
+      "args": ["./packages/docbased-mcp/dist/index.mjs"],
+      "env": {
+        "SUPABASE_URL": "https://<project>.supabase.co",
+        "SUPABASE_SECRET_KEY": "sb_secret_...",
+        "OPENROUTER_API_KEY": "sk-or-..."
+      }
+    }
+  }
+}
+```
+
+### Claude Desktop (`claude_desktop_config.json`)
+
+Same shape — `command` + `args` + `env`. Once published to npm, this becomes:
+
+```jsonc
+{
+  "command": "npx",
+  "args": ["-y", "docbased-mcp"]
+}
+```
+
+### Cursor
+
+`Cursor → Settings → MCP → + Add new MCP server`. Use the same `command` + `args` + `env`.
+
+## Auth modes
+
+| Mode | Trigger | Effect |
+|---|---|---|
+| **service** (default) | `SUPABASE_SECRET_KEY` set, no user creds | Bypass RLS, every space accessible. Use for trusted single-tenant setups. |
+| **user** | `DOCBASED_EMAIL` + `DOCBASED_PASSWORD` set | Sign in to Supabase, resolve `accessibleSpaceIds` for that user. Use when serving multiple humans. |
+
+Override with `DOCBASED_MODE=service|user|auto`.
+
+## Transport
+
+stdio is default and the right choice for every local client above. Streamable HTTP (for hosted use) is available via:
+
+```bash
+node ./packages/docbased-mcp/dist/index.mjs --http --port 3333
+```
+
+## Verify
+
+```bash
+node scripts/smoke-mcp.mjs
+```
+
+The smoke script runs the MCP `initialize` handshake, lists tools/resources/prompts, calls `list_spaces`, and runs a sample `search_documents` query.

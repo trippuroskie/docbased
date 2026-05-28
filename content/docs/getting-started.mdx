@@ -1,0 +1,61 @@
+---
+title: Getting started
+description: Local setup, env vars, first ingest, first search.
+---
+
+## Prerequisites
+
+- Node ≥ 20
+- A Supabase project (Postgres 15 with pgvector, pg_trgm, unaccent extensions)
+- OpenRouter API key (for embeddings + chat)
+
+## Install
+
+```bash
+git clone <repo-url> docbased
+cd docbased
+npm install
+```
+
+## Environment
+
+Create `.env.local` with at least:
+
+```bash
+NEXT_PUBLIC_SUPABASE_URL=https://<project>.supabase.co
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
+SUPABASE_SECRET_KEY=sb_secret_...
+OPENROUTER_API_KEY=sk-or-...
+```
+
+Optional model overrides:
+
+```bash
+EMBEDDING_MODEL=openai/text-embedding-3-small   # 1536 dims — must match the index
+DEFAULT_CHAT_MODEL=anthropic/claude-sonnet-4.5
+RERANKER_MODEL=cohere/rerank-3.5
+```
+
+## Run migrations + seed
+
+```bash
+npm run db:migrate
+npm run seed you@yourcompany.com   # makes you admin + creates the default spaces
+```
+
+## Boot
+
+```bash
+npm run dev     # http://localhost:3000
+```
+
+Sign in via magic link from `/login`. Upload a document from `/admin/upload` or run `npm run upload-obsidian <vault.zip>` to bulk-import an Obsidian vault.
+
+## First search
+
+```bash
+npm run docbased -- spaces
+npm run docbased -- search "your query" --limit 5 --format text
+```
+
+See the [CLI reference](/docs/cli) for the rest of the commands and the [MCP server reference](/docs/mcp) for wiring it up to Claude Code / Claude Desktop / Cursor.

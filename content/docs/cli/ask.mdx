@@ -1,0 +1,37 @@
+---
+title: ask
+description: One-shot RAG — search + answer in a single CLI call.
+---
+
+<ToolSpec
+  name="docbased ask <question>"
+  summary="Searches the knowledge base, builds a context block, and asks an OpenRouter chat model to answer using only the retrieved chunks."
+  params={[
+    { name: "question", type: "string", required: true, description: "Positional. Quote on shells with spaces." },
+    { name: "--space", type: "string", description: "Restrict the search to a single space slug." },
+    { name: "--limit", type: "number", default: 8, description: "Chunks to retrieve (becomes the context window)." },
+    { name: "--model", type: "string", default: "anthropic/claude-sonnet-4.5", description: "Any OpenRouter chat model id." },
+  ]}
+  returns={<>JSON: <code>{`{ question, model, answer, sources: [{ n, documentId, chunkId, title, headingPath[] }], hits: SearchHit[] }`}</code><br/>Text: the answer followed by a citation list.</>}
+/>
+
+## Example
+
+```bash
+npm run docbased -- ask "how do I migrate a Sisense formula to Power BI" --space it
+```
+
+```text
+Run the Sisense formula through the conversion tool first… <cite source="2"/>
+
+Sources:
+  [1] Create New Report in Power BI Desktop
+  [2] Convert Sisense Dashboard Formulas to Power BI
+  …
+```
+
+## Notes
+
+- `ask` is **CLI-only**. The MCP server intentionally exposes search primitives instead — the calling LLM composes its own answer. See the architecture page for why.
+- Streaming is not exposed; the CLI prints the full answer once the model finishes.
+- The default `--format` is `text` for `ask` (unlike other commands which default to JSON).

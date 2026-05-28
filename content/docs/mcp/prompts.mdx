@@ -1,0 +1,27 @@
+---
+title: Prompts
+description: /docbased-ask — slash-command template for grounded research.
+---
+
+Prompts are user-invokable templates. In Claude Desktop / Cursor they show up as `/`-commands. We ship one:
+
+## /docbased-ask
+
+Primes the conversation with the docbased system prompt and the user's question. The model is then expected to call `search_documents` / `get_document` on its own to compose an answer.
+
+### Arguments
+
+| Name | Required | Description |
+|---|---|---|
+| `question` | yes | The question to research. |
+| `space_slug` | no | Restrict every tool call to a single space. |
+
+### Behavior
+
+Inserts a single user-role message with:
+
+1. The shared docbased system prompt (citation rules, tool usage policy, "never invent" guardrails).
+2. The user's question.
+3. If `space_slug` is set, a `Restrict every tool call to space_slug="..."` line.
+
+The model then decides which tools to call. Unlike the CLI's `ask`, the model isn't constrained to a single roundtrip — it can call `search_documents`, follow up with `get_document` or `get_chunk_neighbors` to expand a citation, and answer when it has enough.

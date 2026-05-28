@@ -14,6 +14,7 @@ import {
   AlertCircle,
   Layers,
   Zap,
+  SquarePen,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -200,6 +201,30 @@ export function UnifiedHub({
       window.dispatchEvent(new CustomEvent("hub:refresh-conversations"));
     }
   }, []);
+
+  // Reset the right Ask panel: drop the active conversation, clear messages
+  // and composer, and strip `?conv` from the URL so a reload starts fresh.
+  const startNewChat = React.useCallback(() => {
+    setConversationId(null);
+    setMessages([]);
+    setInputValue("");
+    lastLoadedConv.current = null;
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (params.has("conv") || params.has("q")) {
+        params.delete("conv");
+        params.delete("q");
+        const qs = params.toString();
+        const next = qs
+          ? `${window.location.pathname}?${qs}`
+          : window.location.pathname;
+        router.replace(next, { scroll: false });
+      }
+      window.dispatchEvent(
+        new CustomEvent("hub:active-conversation", { detail: { id: null } }),
+      );
+    }
+  }, [router]);
 
   // Whenever the active conversation changes, broadcast so the sidebar can
   // highlight the right row, and mirror the id into the URL so that
@@ -643,6 +668,7 @@ export function UnifiedHub({
           onClearContextDoc={() =>
             activeTabId && setDismissedContextDocId(activeTabId)
           }
+          onNewChat={startNewChat}
         />
       </ResizablePanel>
     </div>
@@ -811,6 +837,7 @@ interface InlineChatProps {
   onOpenDocInNewTab: (id: string) => void;
   contextDoc: DocTab | null;
   onClearContextDoc: () => void;
+  onNewChat: () => void;
 }
 
 function InlineChat({
@@ -829,6 +856,7 @@ function InlineChat({
   onOpenDocInNewTab,
   contextDoc,
   onClearContextDoc,
+  onNewChat,
 }: InlineChatProps) {
   const scrollRef = React.useRef<HTMLDivElement | null>(null);
   React.useEffect(() => {
@@ -876,8 +904,17 @@ function InlineChat({
 
   return (
     <div className="w-full border-l border-border flex flex-col h-full min-h-0 bg-background">
-      <div className="h-12 px-4 flex items-center justify-center shrink-0">
+      <div className="relative h-12 px-4 flex items-center justify-center shrink-0">
         <span className="text-base font-semibold tracking-tight">Ask</span>
+        <button
+          type="button"
+          onClick={onNewChat}
+          title="New chat"
+          aria-label="New chat"
+          className="absolute right-3 p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors outline-none"
+        >
+          <SquarePen className="size-4" />
+        </button>
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar" ref={scrollRef}>
         <div className="px-4 pb-4 space-y-5">

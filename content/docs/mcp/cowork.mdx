@@ -1,0 +1,118 @@
+---
+title: Claude Cowork
+description: How to load any local MCP server into Claude Cowork (and Claude Desktop) on Windows or macOS.
+---
+
+## What an MCP server is
+
+The [Model Context Protocol](https://modelcontextprotocol.io) (MCP) is an open standard that lets an LLM client (Claude Desktop, Claude Code, Cursor, …) talk to external tools through one common interface. Instead of each app inventing its own plugin format, any MCP-compatible client can connect to any MCP-compatible server.
+
+An MCP server exposes three kinds of capabilities:
+
+- **Tools** — actions the model can call (e.g. `search_documents`, `run_query`).
+- **Resources** — passive, addressable data the user can `@`-mention.
+- **Prompts** — reusable slash-command templates.
+
+Servers speak one of two **transports**:
+
+- **stdio** — the client launches the server as a local subprocess and talks over stdin/stdout. This is what every local desktop client expects, and what this guide covers.
+- **Streamable HTTP** — the server runs as a network service; the client connects by URL. Used for hosted/remote servers.
+
+`docbased-mcp` is one such server (stdio by default). Everything below applies to it and to any other local MCP server.
+
+## How Cowork loads MCP servers
+
+Claude Cowork does **not** have its own MCP configuration. It bridges in whatever stdio servers are defined in Claude **Desktop's** config file. Servers configured there are forwarded transparently into the Cowork environment (they appear with `"type": "sdk"`).
+
+So the workflow is always: **add the server to Desktop's config → fully restart Claude → it shows up in Cowork.**
+
+## Config file location
+
+Settings → **Developer → Local MCP servers → Edit Config** always opens the correct file. Prefer this button over editing by hand.
+
+If you do edit by hand, the path depends on the install:
+
+| Platform / install | Path |
+|---|---|
+| macOS | `~/Library/Application Support/Claude/claude_desktop_config.json` |
+| Windows (standard install) | `%APPDATA%\Claude\claude_desktop_config.json` |
+| Windows (Microsoft Store build) | `%LOCALAPPDATA%\Packages\Claude_<id>\LocalCache\Roaming\Claude\claude_desktop_config.json` |
+
+> The Microsoft Store build redirects the config away from `%APPDATA%\Claude\`. Editing the wrong file is the most common reason a server "won't show up." Use **Edit Config** to be sure.
+
+## Config structure
+
+Every server is a key **inside** the top-level `mcpServers` object. Adding a server is just adding another sibling key — never place it outside `mcpServers`.
+
+### stdio server (the common case)
+
+```jsonc
+{
+  "mcpServers": {
+    "existing-server": { "command": "...", "args": ["..."] },
+
+    "my-new-server": {
+      "command": "node",
+      "args": ["C:/absolute/path/to/server/dist/index.mjs"],
+      "env": {
+        "SOME_API_KEY": "...",
+        "SOME_URL": "https://..."
+      }
+    }
+  }
+}
+```
+
+- **`command`** — the executable to launch (`node`, `npx`, `python`, `uvx`, or a full path to a binary).
+- **`args`** — arguments passed to it. Use **absolute paths** for script files; the subprocess does not inherit your project's working directory.
+- **`env`** — environment variables (API keys, connection strings) injected into the server process.
+
+### Published npm server
+
+If the server is published to npm, you don't need a local build:
+
+```jsonc
+"my-new-server": {
+  "command": "npx",
+  "args": ["-y", "my-new-server"],
+  "env": { "SOME_API_KEY": "..." }
+}
+```
+
+### Remote (HTTP) server
+
+For a hosted server, use Settings → **Connectors** and add a custom connector by URL, or proxy it with a stdio bridge such as `mcp-remote`:
+
+```jsonc
+"my-remote-server": {
+  "command": "npx",
+  "args": ["mcp-remote", "https://mcp.example.com/mcp", "--header", "Authorization: Bearer <token>"]
+}
+```
+
+## Steps to add a server
+
+1. **Get the server ready.** For a local source build, build it first (for `docbased-mcp`: `npm install` then `npm run build --workspace docbased-mcp`, producing `packages/docbased-mcp/dist/index.mjs`). For a published package, skip this.
+2. **Open the config** via Settings → Developer → Local MCP servers → Edit Config.
+3. **Add the server** as a new key inside `mcpServers` (see structure above).
+4. **Fully quit Claude** from the system tray (right-click → Quit), not just the window — desktop builds stay resident in the background.
+5. **Relaunch** and confirm the server shows as **running** under Local MCP servers. It's now also available in Cowork.
+
+## Verify & debug
+
+- **View Logs** on the server's card surfaces startup failures (bad path, auth errors, missing binary).
+- A server-specific smoke test, if provided, is the fastest sanity check. For docbased: `node scripts/smoke-mcp.mjs`.
+
+## Common pitfalls
+
+| Symptom | Cause |
+|---|---|
+| Server never appears | Edited the wrong config file, or the entry was placed outside `mcpServers` |
+| Entire server list disappears | Invalid JSON (a single trailing comma breaks the whole file) |
+| Appears but won't start | `command` binary not on PATH, or wrong/relative path to the entry file |
+| Edits seem ignored | Didn't fully quit from the tray before relaunching |
+| `node`/`python` not found | The client launches with your user session's environment; if the runtime isn't globally resolvable, use its full path as `command` |
+
+## Security note
+
+Secrets in `env` are stored in **plaintext** in this config file. That's acceptable for a local-only file, but never copy these values into anything tracked by git, and keep real keys out of `.env` files that might be committed.

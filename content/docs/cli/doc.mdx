@@ -1,0 +1,43 @@
+---
+title: doc
+description: Read a single document or list documents.
+---
+
+## doc get
+
+<ToolSpec
+  name="docbased doc get <ref>"
+  summary="Fetch one document by UUID or by space-slug/path."
+  params={[
+    { name: "ref", type: "string", required: true, description: "Document UUID, or 'space-slug/path' (e.g. 'it/Sisense to Power BI Migration Guide')." },
+  ]}
+  returns="JSON document object: { id, spaceId, title, path, status, tags[], rawContent, lastEditedAt }"
+  errors={[
+    { when: "doc get: not found or not accessible.", message: "Either the document doesn't exist or it lives in a space the caller can't see." },
+  ]}
+/>
+
+```bash
+# By UUID
+npm run docbased -- doc get 7b9ff5eb-993e-48e7-847a-f43ba3b3e60a --format text
+
+# By path — call tsx directly to keep shell quotes
+npx tsx scripts/cli.ts doc get "it/Sisense to Power BI Migration Guide" --format text
+```
+
+## doc list
+
+<ToolSpec
+  name="docbased doc list"
+  summary="Paginated inventory ordered by most-recently-edited first."
+  params={[
+    { name: "--space", type: "string", description: "Restrict to a single space slug." },
+    { name: "--limit", type: "number", default: 25, description: "Page size (1-100)." },
+    { name: "--cursor", type: "string", description: "Opaque cursor from a previous response — pass to fetch the next page." },
+  ]}
+  returns={<>JSON: <code>{`{ items: DocumentSummary[], nextCursor: string | null }`}</code></>}
+/>
+
+```bash
+npm run docbased -- doc list --space it --limit 10 --format text
+```
