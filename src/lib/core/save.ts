@@ -109,6 +109,14 @@ export async function createDocument(
   const documentId =
     existing && conflict === "replace" ? existing.id : randomUUID();
 
+  // `documents.original_filename` is NOT NULL in the schema (every other path
+  // — admin upload, `docbased import`, the obsidian script — comes from a real
+  // file). Agent-authored docs have no source file, so synthesize one from
+  // the resolved path; it mirrors what `import` would have produced for the
+  // same markdown delivered as a file.
+  const filenameSegment = path.split("/").pop() || "document";
+  const originalFilename = `${filenameSegment}.md`;
+
   const { error: upErr } = await supabase.from("documents").upsert(
     {
       id: documentId,
@@ -117,7 +125,7 @@ export async function createDocument(
       path,
       source_format: "md",
       processing_status: "indexed",
-      original_filename: null,
+      original_filename: originalFilename,
       original_storage_path: null,
       raw_content: finalMarkdown,
       content_hash: contentHash,
