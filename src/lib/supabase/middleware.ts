@@ -12,6 +12,15 @@ const PUBLIC_PATHS = [
 ];
 
 export async function updateSession(request: NextRequest) {
+  // /mcp authenticates with its own bearer token (no Supabase cookie), so skip
+  // the session refresh + login redirect entirely. Otherwise unauthenticated
+  // MCP requests get 307'd to /login instead of reaching the route's own token
+  // check, and clients that follow redirects receive HTML.
+  const pathname = request.nextUrl.pathname;
+  if (pathname === "/mcp" || pathname.startsWith("/mcp/")) {
+    return NextResponse.next({ request });
+  }
+
   let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(env.supabaseUrl, env.supabasePublishableKey, {

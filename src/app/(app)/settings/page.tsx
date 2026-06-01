@@ -2,6 +2,8 @@ import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { getCurrentUserRecord, requireUser } from "@/lib/auth";
 import { getUserSettings } from "@/lib/settings";
+import { createServiceClient } from "@/lib/supabase/server";
+import { listMcpTokens } from "@/lib/core/tokens";
 import {
   Card,
   CardContent,
@@ -11,14 +13,16 @@ import {
 } from "@/components/ui/card";
 import { SignOutButton } from "./sign-out-button";
 import { ModelPreferences } from "./model-preferences";
+import { AccessTokens } from "./access-tokens";
 
 export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
   const user = await requireUser();
-  const [me, settings] = await Promise.all([
+  const [me, settings, tokens] = await Promise.all([
     getCurrentUserRecord(),
     getUserSettings(user.id),
+    listMcpTokens(createServiceClient(), user.id),
   ]);
 
   return (
@@ -78,6 +82,8 @@ export default async function SettingsPage() {
         )}
 
         <ModelPreferences initial={settings} />
+
+        <AccessTokens initial={tokens} />
 
         <Card>
           <CardHeader>

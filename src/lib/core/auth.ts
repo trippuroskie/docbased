@@ -102,43 +102,64 @@ export async function resolveCaller(envIn: CallerEnv): Promise<ResolvedCaller> {
 
   // Look up admin flag + space_access via the service client (same reason
   // as the web app: the `users` RLS policy self-references and returns null).
-  const { data: me } = await serviceClient
-    .from("users")
-    .select("is_admin")
-    .eq("id", userId)
-    .single();
-  const isAdmin = me?.is_admin === true;
-
-  let accessibleSpaceIds: string[];
-  let spaceNamesById: Map<string, string>;
-
-  if (isAdmin) {
-    const all = await loadAllSpaces(serviceClient);
-    accessibleSpaceIds = all.ids;
-    spaceNamesById = all.names;
-  } else {
-    const { data: access } = await serviceClient
-      .from("space_access")
-      .select("space_id")
-      .eq("user_id", userId);
-    accessibleSpaceIds = (access ?? []).map((a) => a.space_id as string);
-    if (accessibleSpaceIds.length === 0) {
-      spaceNamesById = new Map();
-    } else {
-      const { data: spaces } = await serviceClient
-        .from("spaces")
-        .select("id, name")
-        .in("id", accessibleSpaceIds);
-      spaceNamesById = new Map(
-        (spaces ?? []).map((s) => [s.id as string, s.name as string]),
-      );
-    }
-  }
+  const { accessibleSpaceIds, spaceNamesById } = await loadAccessForUser(
+    serviceClient,
+    userId,
+  );
 
   return {
     mode: "user",
     userId,
     userEmail: envIn.userEmail,
+    accessibleSpaceIds,
+    spaceNamesById,
+    serviceClient,
+  };
+}
+
+/**
+ * Build a service-role Supabase client from env. Shared by non-Next callers
+ * (CLI, MCP server) that need the RLS-bypassing client outside resolveCaller.
+ */
+export function serviceClientFromEnv(
+  envIn: CallerEnv = callerEnvFromProcessEnv(),
+): SupabaseClient {
+  if (!envIn.supabaseSecretKey) {
+    throw new Error(
+      "serviceClientFromEnv: SUPABASE_SECRET_KEY (or SUPABASE_SERVICE_ROLE_KEY) is required.",
+    );
+  }
+  return createClient(envIn.supabaseUrl, envIn.supabaseSecretKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+}
+
+/**
+ * Resolve a caller from a known user id — no sign-in. Used by the remote (HTTP)
+ * MCP server after a personal access token has been validated (see
+ * src/lib/core/tokens.ts): map the token's owner to their email + space access.
+ *
+ * Data reads still go through the service client, after the accessibleSpaceIds
+ * check (the same RLS-recursion workaround the web app and password user-mode
+ * use — see AGENTS.md "Auth & RLS").
+ */
+export async function resolveCallerForUser(
+  serviceClient: SupabaseClient,
+  userId: string,
+): Promise<ResolvedCaller> {
+  const { data: user } = await serviceClient
+    .from("users")
+    .select("email")
+    .eq("id", userId)
+    .maybeSingle();
+  const { accessibleSpaceIds, spaceNamesById } = await loadAccessForUser(
+    serviceClient,
+    userId,
+  );
+  return {
+    mode: "user",
+    userId,
+    userEmail: (user?.email as string | null) ?? null,
     accessibleSpaceIds,
     spaceNamesById,
     serviceClient,
@@ -165,6 +186,44 @@ async function loadAllSpaces(
     (data ?? []).map((s) => [s.id as string, s.name as string]),
   );
   return { ids, names };
+}
+
+/**
+ * Given a user id, resolve the spaces they may read. Admins get every space;
+ * everyone else gets their explicit `space_access` rows. Reads via the service
+ * client. Shared by password user-mode (resolveCaller) and OAuth identity mode
+ * (resolveCallerFromIdentity).
+ */
+async function loadAccessForUser(
+  serviceClient: SupabaseClient,
+  userId: string,
+): Promise<{ accessibleSpaceIds: string[]; spaceNamesById: Map<string, string> }> {
+  const { data: me } = await serviceClient
+    .from("users")
+    .select("is_admin")
+    .eq("id", userId)
+    .single();
+  if (me?.is_admin === true) {
+    const all = await loadAllSpaces(serviceClient);
+    return { accessibleSpaceIds: all.ids, spaceNamesById: all.names };
+  }
+
+  const { data: access } = await serviceClient
+    .from("space_access")
+    .select("space_id")
+    .eq("user_id", userId);
+  const accessibleSpaceIds = (access ?? []).map((a) => a.space_id as string);
+  if (accessibleSpaceIds.length === 0) {
+    return { accessibleSpaceIds, spaceNamesById: new Map() };
+  }
+  const { data: spaces } = await serviceClient
+    .from("spaces")
+    .select("id, name")
+    .in("id", accessibleSpaceIds);
+  const spaceNamesById = new Map(
+    (spaces ?? []).map((s) => [s.id as string, s.name as string]),
+  );
+  return { accessibleSpaceIds, spaceNamesById };
 }
 
 /**

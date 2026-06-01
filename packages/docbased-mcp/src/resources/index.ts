@@ -7,12 +7,11 @@
 // Both are read-only; access control mirrors the tools' (the caller's
 // accessibleSpaceIds resolved at server start).
 
-import type { FastMCP } from "fastmcp";
 import { getDocument, listDocuments, listSpaces } from "@core/docs";
-import { audit, getContext } from "../context.js";
-import { capResponse, isoOrEmpty } from "../util.js";
+import { audit, toolContext, type DocbasedServer } from "../context.js";
+import { capResponse, isoOrEmpty } from "@core/format";
 
-export function register(server: FastMCP) {
+export function register(server: DocbasedServer) {
   server.addResourceTemplate({
     uriTemplate: "docbased://space/{slug}",
     name: "Space — document index",
@@ -26,8 +25,8 @@ export function register(server: FastMCP) {
         required: true,
       },
     ],
-    load: async ({ slug }) => {
-      const ctx = await getContext();
+    load: async ({ slug }, auth) => {
+      const ctx = await toolContext(auth);
       const spaces = await listSpaces(ctx.caller.serviceClient, {
         accessibleSpaceIds: ctx.caller.accessibleSpaceIds,
       });
@@ -81,8 +80,8 @@ export function register(server: FastMCP) {
         required: true,
       },
     ],
-    load: async ({ id }) => {
-      const ctx = await getContext();
+    load: async ({ id }, auth) => {
+      const ctx = await toolContext(auth);
       const doc = await getDocument(
         ctx.caller.serviceClient,
         { id },
