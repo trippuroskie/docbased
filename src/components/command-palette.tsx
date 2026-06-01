@@ -65,7 +65,7 @@ export function CommandPalette() {
   return (
     <CommandDialog open={open} onOpenChange={setOpen}>
       <CommandInput
-        placeholder="Search the knowledge hub…"
+        placeholder="Search docbased…"
         value={query}
         onValueChange={setQuery}
       />

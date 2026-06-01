@@ -47,7 +47,7 @@ export async function listOpenRouterModels(opts: {
 
   const headers: Record<string, string> = {
     "HTTP-Referer": env.appUrl,
-    "X-Title": "Knowledge Hub",
+    "X-Title": "docbased",
   };
   // The /models endpoint is public, but sending the key gives access to any
   // org-private models the workspace has access to.

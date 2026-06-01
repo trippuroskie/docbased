@@ -15,14 +15,11 @@
 
 import { FastMCP } from "fastmcp";
 
-import { register as registerSearch } from "./tools/search-documents.js";
-import { register as registerListSpaces } from "./tools/list-spaces.js";
-import { register as registerListDocuments } from "./tools/list-documents.js";
-import { register as registerGetDocument } from "./tools/get-document.js";
-import { register as registerChunks } from "./tools/get-chunk.js";
-import { register as registerSaveDocument } from "./tools/save-document.js";
+import { mcpToolDefs } from "@core/mcp-tools";
 import { register as registerResources } from "./resources/index.js";
 import { register as registerAskPrompt } from "./prompts/ask.js";
+import { toolContext, type DocbasedAuth } from "./context.js";
+import { makeTokenAuthenticate } from "./auth/token.js";
 import { log } from "./util.js";
 
 type Mode = "stdio" | "http";
@@ -66,23 +63,47 @@ Optional env:
 async function main() {
   const { mode, port } = parseFlags(process.argv.slice(2));
 
-  const server = new FastMCP({
+  // Token auth applies to the HTTP transport only. stdio is local/single-user
+  // and resolves its caller from env, so it stays unauthenticated by design.
+  // Opt out of token auth on HTTP with MCP_AUTH=none (trusted network / dev).
+  const requireToken =
+    mode === "http" && (process.env.MCP_AUTH ?? "token") !== "none";
+
+  const server = new FastMCP<DocbasedAuth>({
     name: "docbased",
     version: "0.1.0",
     instructions:
       "Search, retrieve, and save documents in the docbased knowledge hub. Use list_spaces to see what's available, search_documents for substantive content, list_documents for inventory, and get_document / get_chunk to fetch full text. Use save_document to persist new markdown (research notes, summaries, generated content) into a space — saved docs are tagged 'agent-authored' so they're filterable later.",
+    ...(requireToken ? { authenticate: makeTokenAuthenticate() } : {}),
   });
 
-  registerSearch(server);
-  registerListSpaces(server);
-  registerListDocuments(server);
-  registerGetDocument(server);
-  registerChunks(server);
-  registerSaveDocument(server);
+  // Register the shared tool surface (src/lib/core/mcp-tools.ts) — the same
+  // definitions the remote /mcp route uses. The per-call caller comes from the
+  // HTTP token auth (session) or the env caller on stdio (toolContext).
+  for (const def of mcpToolDefs) {
+    server.addTool({
+      name: def.name,
+      description: def.description,
+      parameters: def.parameters,
+      execute: async (args, { session }) =>
+        def.run(await toolContext(session), args),
+    });
+  }
   registerResources(server);
   registerAskPrompt(server);
 
   if (mode === "http") {
+    if (requireToken) {
+      log(
+        "token auth enabled — every request needs a docbased access token " +
+          "(Authorization: Bearer dbk_…), scoped to that user's spaces.",
+      );
+    } else {
+      log(
+        "WARNING: MCP_AUTH=none — the HTTP server is UNAUTHENTICATED and uses " +
+          "the env caller for every request. Do not expose this publicly.",
+      );
+    }
     log(`starting HTTP transport on :${port}`);
     await server.start({
       transportType: "httpStream",

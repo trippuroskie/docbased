@@ -15,7 +15,7 @@ export function openrouter(): OpenAI {
     baseURL: "https://openrouter.ai/api/v1",
     defaultHeaders: {
       "HTTP-Referer": env.appUrl,
-      "X-Title": "Knowledge Hub",
+      "X-Title": "docbased",
     },
   });
   return _client;

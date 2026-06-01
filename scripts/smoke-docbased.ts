@@ -1,9 +1,9 @@
-// Smoke test for the wired knowledge-hub data layer.
+// Smoke test for the wired docbased data layer.
 // Exercises the same queries the home page runs, but bypasses auth by using
 // the service-role client. Verifies: spaces load, tree builds, doc payload
 // resolves with raw_content + backlinks + wikilinks.
 //
-//   npm exec tsx scripts/smoke-knowledge-hub.ts
+//   npm exec tsx scripts/smoke-docbased.ts
 //
 // Exits 0 on success, 1 on failure. Prints a short summary.
 

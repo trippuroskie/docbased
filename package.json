@@ -33,6 +33,7 @@
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
     "drizzle-orm": "^0.45.2",
+    "fastmcp": "^3.35.0",
     "fumadocs-core": "^16.9.1",
     "fumadocs-mdx": "^15.0.9",
     "fumadocs-ui": "^16.9.1",

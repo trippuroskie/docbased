@@ -4,8 +4,8 @@ import {
   requireUser,
 } from "@/lib/auth";
 import { getSpaceTree } from "@/lib/tree";
-import { UnifiedHub } from "@/components/knowledge-hub/unified-hub";
-import type { SpaceWithTree } from "@/components/knowledge-hub/types";
+import { UnifiedHub } from "@/components/docbased/unified-hub";
+import type { SpaceWithTree } from "@/components/docbased/types";
 import {
   effectiveChatModels,
   effectiveDefaultChatModel,

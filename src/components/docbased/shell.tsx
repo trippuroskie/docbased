@@ -8,7 +8,7 @@ import { TopBar } from "./top-bar";
 import { ResizablePanel } from "./resizable-panel";
 import type { ChatUser, DocPayload, SpaceWithTree } from "./types";
 
-export function KnowledgeHubShell({
+export function DocbasedShell({
   user,
   spaces,
   selectedDocId,

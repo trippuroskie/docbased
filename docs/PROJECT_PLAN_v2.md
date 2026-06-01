@@ -1,4 +1,4 @@
-# Knowledge Hub — Project Plan v2
+# docbased — Project Plan v2
 
 A shadcn-styled documentation and search tool for multiple knowledge "spaces" (IT, Ecomm, personal notes, future departments), with semantic search and RAG chat scoped to each user's access. Built for two audiences: (1) the person backfilling the author's IT role, and (2) the author in their new Ecomm role, using the same tool to make accumulated knowledge searchable.
 
@@ -494,7 +494,7 @@ Each phase ends in something runnable. Don't skip ahead.
 - [ ] Create Supabase project (Org-owned account, **not** personal — see §10).
 - [ ] Enable `vector`, `pg_trgm`, `unaccent` extensions.
 - [ ] Create OpenRouter account (org-owned), add credits, set monthly spend ceiling, generate API key.
-- [ ] Scaffold Next.js 15 app: `pnpm create next-app@latest knowledge-hub --typescript --tailwind --app --src-dir`
+- [ ] Scaffold Next.js 15 app: `pnpm create next-app@latest docbased --typescript --tailwind --app --src-dir`
 - [ ] Run `pnpm dlx shadcn@latest init`, install components listed in §7.
 - [ ] Install deps: `drizzle-orm`, `postgres`, `@supabase/supabase-js`, `@supabase/ssr`, `openai`, `gray-matter`, `jszip`, `react-markdown`, `remark-gfm`, `remark-frontmatter`, `rehype-shiki`, `llm-text-splitter`. *(Rich-format extractors — mammoth, pdf-parse, node-pptx-parser, xlsx — deferred to v1.5.)*
 - [ ] Configure environment variables: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `OPENROUTER_API_KEY`, `EMBEDDING_MODEL`, `DEFAULT_CHAT_MODEL`, `MONTHLY_SPEND_CEILING`.

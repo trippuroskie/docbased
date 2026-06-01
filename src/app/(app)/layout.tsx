@@ -4,8 +4,8 @@ import {
   requireUser,
 } from "@/lib/auth";
 import { getSpaceTree } from "@/lib/tree";
-import { AppShell } from "@/components/knowledge-hub/app-shell";
-import type { SpaceWithTree } from "@/components/knowledge-hub/types";
+import { AppShell } from "@/components/docbased/app-shell";
+import type { SpaceWithTree } from "@/components/docbased/types";
 
 export const dynamic = "force-dynamic";
 

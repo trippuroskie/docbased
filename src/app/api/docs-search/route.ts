@@ -1,5 +1,5 @@
 // Fumadocs search index. Mounted at /api/docs-search to avoid clashing
-// with the knowledge-hub /api/search route. The (docs) layout points
+// with the docbased /api/search route. The (docs) layout points
 // RootProvider at this URL via the searchOptions prop.
 
 import { createFromSource } from "fumadocs-core/search/server";

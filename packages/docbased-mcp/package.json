@@ -31,7 +31,7 @@
   ],
   "dependencies": {
     "@supabase/supabase-js": "^2.105.4",
-    "fastmcp": "^3.18.0",
+    "fastmcp": "^3.35.0",
     "openai": "^6.37.0",
     "zod": "^4.4.3"
   },
