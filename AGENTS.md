@@ -8,7 +8,7 @@ The most likely traps in Next.js 16 for this repo: `middleware.ts` is now [`prox
 
 ## What this app is
 
-Knowledge Hub — internal docs search + RAG chat for multiple "spaces" (IT, Ecomm, personal notes) with per-user role-based access. Operational runbook is in [README.md](README.md); product spec in [docs/PROJECT_PLAN_v2.md](docs/PROJECT_PLAN_v2.md).
+docbased — internal docs search + RAG chat for multiple "spaces" (IT, Ecomm, personal notes) with per-user role-based access. Operational runbook is in [README.md](README.md); product spec in [docs/PROJECT_PLAN_v2.md](docs/PROJECT_PLAN_v2.md).
 
 ## Stack
 
@@ -26,7 +26,7 @@ src/
     (app)/         auth-required routes; wrapped by AppShell w/ persistent sidebar
     api/           route handlers (chat is Node runtime, 60s maxDuration)
     login/, auth/  magic-link sign-in + OAuth callback
-  components/      sidebar, top-bar, chat panel, command palette, knowledge-hub/*
+  components/      sidebar, top-bar, chat panel, command palette, docbased/*
   lib/
     auth.ts       requireUser / requireAdmin / getAccessibleSpaces (cached)
     env.ts        centralized env access — fail loud at boot

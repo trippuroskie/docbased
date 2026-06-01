@@ -495,7 +495,7 @@ export function ChatSidebar({
           <div className="size-6 rounded bg-primary/20 flex items-center justify-center shrink-0">
             <Layers className="size-3.5 text-primary" />
           </div>
-          <span className="font-semibold text-sm">Knowledge Hub</span>
+          <span className="font-semibold text-sm">docbased</span>
         </div>
         <Button
           variant="ghost"

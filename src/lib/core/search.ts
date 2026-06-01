@@ -128,7 +128,7 @@ async function rerank(
         Authorization: `Bearer ${cfg.apiKey}`,
         "Content-Type": "application/json",
         "HTTP-Referer": cfg.appUrl,
-        "X-Title": "Knowledge Hub",
+        "X-Title": "docbased",
       },
       body: JSON.stringify({
         model: cfg.model,

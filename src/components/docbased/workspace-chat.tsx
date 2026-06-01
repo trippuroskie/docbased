@@ -629,7 +629,7 @@ function DocSplitPanel({
           </div>
         ) : doc.status === "metadata_only" ? (
           <div className="rounded-md border border-border bg-secondary/30 p-4 text-sm text-muted-foreground">
-            This file is stored as metadata only — open it in the Knowledge Hub
+            This file is stored as metadata only — open it in docbased
             to download the original.
           </div>
         ) : (

@@ -131,7 +131,7 @@ export function Sidebar({
               <Layers className="size-3.5 text-primary" />
             </div>
             {!isCollapsed && (
-              <span className="font-semibold text-sm">Knowledge Hub</span>
+              <span className="font-semibold text-sm">docbased</span>
             )}
           </div>
           {!isCollapsed && (

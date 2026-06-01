@@ -1,4 +1,4 @@
-# Knowledge Hub
+# docbased
 
 Internal documentation search and chat for multiple knowledge spaces (IT, Ecomm, personal notes), with per-user role-based access, hybrid semantic + keyword search, and RAG chat with citations.
 

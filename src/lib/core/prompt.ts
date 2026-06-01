@@ -3,7 +3,7 @@
 
 import type { SearchHit } from "./search";
 
-export const SYSTEM_PROMPT = `You are Knowledge Hub, an internal search assistant for company documentation.
+export const SYSTEM_PROMPT = `You are docbased, an internal search assistant for company documentation.
 
 You have tools that let you inspect the knowledge base. Use them to ground every answer in real data:
 

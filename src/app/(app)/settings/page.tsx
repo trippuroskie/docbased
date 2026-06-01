@@ -29,7 +29,7 @@ export default async function SettingsPage() {
           className="flex items-center gap-1 text-xs text-muted-foreground"
         >
           <Link href="/" className="hover:text-foreground hover:underline">
-            Knowledge Hub
+            docbased
           </Link>
           <ChevronRight className="size-3" />
           <span className="text-foreground">Settings</span>

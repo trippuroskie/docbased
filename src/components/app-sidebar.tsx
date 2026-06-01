@@ -23,7 +23,7 @@ export async function AppSidebar() {
     <Sidebar collapsible="icon">
       <SidebarHeader className="px-3 py-2">
         <Link href="/" className="text-sm font-semibold">
-          Knowledge Hub
+          docbased
         </Link>
       </SidebarHeader>
       <SidebarContent>

@@ -685,7 +685,7 @@ function EmptyCenter() {
           <Sparkles className="size-6 text-primary" />
         </div>
         <h1 className="text-xl font-semibold tracking-tight">
-          Knowledge Hub
+          docbased
         </h1>
         <p className="text-sm text-muted-foreground">
           Click a document in the sidebar to preview it here. Double-click to

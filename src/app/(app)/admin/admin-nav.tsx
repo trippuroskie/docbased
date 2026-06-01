@@ -22,10 +22,10 @@ export function AdminNav() {
       <Link
         href="/"
         className="inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-        title="Back to Knowledge Hub"
+        title="Back to docbased"
       >
         <ArrowLeft className="size-4" />
-        <span>Knowledge Hub</span>
+        <span>docbased</span>
       </Link>
       <div className="h-5 w-px bg-border" />
       <span className="inline-flex h-8 items-center gap-1.5 px-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">

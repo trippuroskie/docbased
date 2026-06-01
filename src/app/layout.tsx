@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Knowledge Hub",
+  title: "docbased",
   description: "Search and chat with your team's documentation.",
 };
 
