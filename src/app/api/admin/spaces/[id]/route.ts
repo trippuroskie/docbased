@@ -1,26 +1,14 @@
 import { NextResponse } from "next/server";
-import { createClient, createServiceClient } from "@/lib/supabase/server";
-
-async function requireAdmin() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return null;
-  const { data: me } = await supabase
-    .from("users")
-    .select("is_admin")
-    .eq("id", user.id)
-    .single();
-  return me?.is_admin ? user : null;
-}
+import { createServiceClient } from "@/lib/supabase/server";
+import { requireAdminApi } from "@/lib/auth";
 
 export async function DELETE(
   _request: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
-  const me = await requireAdmin();
-  if (!me) return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  const gate = await requireAdminApi();
+  if (!gate.ok) return gate.response;
+  const { user } = gate;
 
   const { id } = await ctx.params;
   const admin = createServiceClient();
@@ -34,7 +22,7 @@ export async function DELETE(
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
   await admin.from("audit_log").insert({
-    actor_id: me.id,
+    actor_id: user.id,
     action: "delete",
     target_type: "space",
     target_id: id,

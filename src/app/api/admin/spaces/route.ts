@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/server";
+import { requireAdminApi } from "@/lib/auth";
 
 const Body = z.object({
   name: z.string().min(1).max(100),
@@ -9,17 +10,9 @@ const Body = z.object({
 });
 
 export async function POST(request: Request) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  const { data: me } = await supabase
-    .from("users")
-    .select("is_admin")
-    .eq("id", user.id)
-    .single();
-  if (!me?.is_admin) return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  const gate = await requireAdminApi();
+  if (!gate.ok) return gate.response;
+  const { user } = gate;
 
   const body = Body.parse(await request.json());
   const admin = createServiceClient();

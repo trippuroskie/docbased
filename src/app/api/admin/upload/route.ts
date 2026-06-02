@@ -1,28 +1,14 @@
 import { NextResponse } from "next/server";
-import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { requireAdminApi } from "@/lib/auth";
 import { ingestUpload } from "@/lib/ingest/pipeline";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
 export async function POST(request: Request) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-
-  // RLS on public.users blocks the user-session read; use service client to
-  // verify admin (auth already happened via supabase.auth.getUser above).
-  const admin = createServiceClient();
-  const { data: me } = await admin
-    .from("users")
-    .select("is_admin")
-    .eq("id", user.id)
-    .single();
-  if (!me?.is_admin) {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  }
+  const gate = await requireAdminApi();
+  if (!gate.ok) return gate.response;
+  const { user } = gate;
 
   const form = await request.formData();
   const file = form.get("file") as File | null;
