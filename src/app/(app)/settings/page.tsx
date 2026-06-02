@@ -4,6 +4,7 @@ import { getCurrentUserRecord, requireUser } from "@/lib/auth";
 import { getUserSettings } from "@/lib/settings";
 import { createServiceClient } from "@/lib/supabase/server";
 import { listMcpTokens } from "@/lib/core/tokens";
+import { env } from "@/lib/env";
 import {
   Card,
   CardContent,
@@ -83,7 +84,7 @@ export default async function SettingsPage() {
 
         <ModelPreferences initial={settings} />
 
-        <AccessTokens initial={tokens} />
+        <AccessTokens initial={tokens} mcpUrl={`${env.appUrl}/mcp`} />
 
         <Card>
           <CardHeader>

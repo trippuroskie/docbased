@@ -101,6 +101,19 @@ Two paths:
 
 Pick two test users (A in space X, B in space Y) and confirm via SQL that A can't see B's data — using the user's JWT as the connection context, not the service-role key. Do this before any real content goes in. Without this check, you're trusting that the policies in `0003_rls.sql` were written correctly; with it, you have evidence.
 
+### Programmatic access (CLI & remote MCP)
+
+Two surfaces let agents and scripts reach the knowledge base. They authenticate differently.
+
+**CLI** (`npm run docbased -- <cmd>`) authenticates via **env vars**, not tokens. Service mode (default) needs `SUPABASE_URL` + `SUPABASE_SECRET_KEY` + `OPENROUTER_API_KEY` and acts as the first admin (or `--as <email>`). Add `DOCBASED_EMAIL` + `DOCBASED_PASSWORD` (+ the publishable key) to run scoped to a real user. Force the mode with `--mode service|user|auto`. See `scripts/cli.ts --help`.
+
+**Remote MCP** is served at **`https://www.docbased.dev/mcp`** (Streamable HTTP) and authenticates with a **personal access token** (`Authorization: Bearer dbk_…`). Mint one in **Settings → Access tokens** (shown once); revoke there too. The Settings page also shows the canonical URL and a copy-paste config.
+
+- Claude Code: `claude mcp add --transport http docbased https://www.docbased.dev/mcp --header "Authorization: Bearer dbk_…"`
+- Claude Desktop: use the `mcp-remote` bridge (see the Settings → Access tokens snippet), then fully restart the app.
+
+> **Always use the `www.` host.** The apex `docbased.dev` is served by the app (no platform redirect) precisely so `/mcp` works — but if a platform redirect is ever re-enabled, the apex→www hop is cross-origin and strips the `Authorization` header, silently breaking MCP. Canonicalization of *pages* (not `/mcp` or `/api`) is handled in [`src/proxy.ts`](src/proxy.ts).
+
 ## v1.5 / v2 backlog
 
 See [docs/PROJECT_PLAN_v2.md §9](docs/PROJECT_PLAN_v2.md). Tier 2 (metadata-only) documents automatically become Tier 1 (indexed) as rich-format extractors ship.
