@@ -19,15 +19,58 @@ function fmtDate(iso: string | null): string {
   });
 }
 
-export function AccessTokens({ initial }: { initial: McpTokenRow[] }) {
+export function AccessTokens({
+  initial,
+  mcpUrl,
+}: {
+  initial: McpTokenRow[];
+  mcpUrl: string;
+}) {
   const [tokens, setTokens] = React.useState<McpTokenRow[]>(initial);
   const [name, setName] = React.useState("");
   const [creating, setCreating] = React.useState(false);
   const [revoking, setRevoking] = React.useState<string | null>(null);
   const [freshToken, setFreshToken] = React.useState<string | null>(null);
   const [copied, setCopied] = React.useState(false);
+  const [copiedUrl, setCopiedUrl] = React.useState(false);
+  const [copiedConfig, setCopiedConfig] = React.useState(false);
 
   const active = tokens.filter((t) => !t.revokedAt);
+
+  // Claude Desktop bridges remote servers through mcp-remote; the token goes in
+  // `env` so it stays out of the args list. (Claude Code speaks HTTP transport
+  // natively: `claude mcp add --transport http docbased <url> --header ...`.)
+  const desktopConfig = JSON.stringify(
+    {
+      mcpServers: {
+        docbased: {
+          command: "npx",
+          args: [
+            "-y",
+            "mcp-remote@latest",
+            mcpUrl,
+            "--header",
+            "Authorization:${DOCBASED_AUTH_HEADER}",
+          ],
+          env: { DOCBASED_AUTH_HEADER: "Bearer dbk_your_token_here" },
+        },
+      },
+    },
+    null,
+    2,
+  );
+
+  const copyUrl = async () => {
+    await navigator.clipboard.writeText(mcpUrl);
+    setCopiedUrl(true);
+    toast.success("MCP URL copied");
+  };
+
+  const copyConfig = async () => {
+    await navigator.clipboard.writeText(desktopConfig);
+    setCopiedConfig(true);
+    toast.success("Config copied");
+  };
 
   const create = async () => {
     setCreating(true);
@@ -80,6 +123,46 @@ export function AccessTokens({ initial }: { initial: McpTokenRow[] }) {
           it&apos;s shown once and can&apos;t be recovered, only revoked.
         </p>
       </header>
+
+      {/* Remote MCP endpoint — the canonical URL + a copy-paste Claude Desktop
+          config. Use this exact host: the apex redirects, and a redirect drops
+          the Authorization header, which breaks the MCP connection. */}
+      <div className="rounded-md border bg-muted/30 p-3 space-y-2">
+        <Label className="text-xs font-medium">Remote MCP endpoint</Label>
+        <div className="flex items-center gap-2">
+          <code className="flex-1 truncate rounded bg-background px-2 py-1.5 text-xs font-mono">
+            {mcpUrl}
+          </code>
+          <Button size="sm" variant="secondary" onClick={copyUrl}>
+            {copiedUrl ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+          </Button>
+        </div>
+        <details className="group">
+          <summary className="cursor-pointer text-[11px] text-muted-foreground hover:text-foreground">
+            Claude Desktop config
+          </summary>
+          <div className="mt-2 space-y-2">
+            <p className="text-[11px] text-muted-foreground">
+              Add to <code className="font-mono">claude_desktop_config.json</code>, replace the
+              token, then fully restart Claude Desktop. In Claude Code instead run{" "}
+              <code className="font-mono">claude mcp add --transport http docbased {mcpUrl}</code>.
+            </p>
+            <div className="relative">
+              <pre className="overflow-x-auto rounded bg-background p-2 text-[10px] font-mono leading-relaxed">
+                {desktopConfig}
+              </pre>
+              <Button
+                size="sm"
+                variant="secondary"
+                className="absolute right-1.5 top-1.5"
+                onClick={copyConfig}
+              >
+                {copiedConfig ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+              </Button>
+            </div>
+          </div>
+        </details>
+      </div>
 
       {/* One-time reveal of a freshly-created token */}
       {freshToken && (
