@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/server";
+import { requireAdminApi } from "@/lib/auth";
 import { embed } from "@/lib/ai/openrouter";
 import { env } from "@/lib/env";
 
@@ -10,17 +11,8 @@ export const maxDuration = 300;
 // Designed to be called repeatedly until { remaining: 0 } — the route processes
 // a single batch each call to stay inside Vercel's timeout.
 export async function POST() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  const { data: me } = await supabase
-    .from("users")
-    .select("is_admin")
-    .eq("id", user.id)
-    .single();
-  if (!me?.is_admin) return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  const gate = await requireAdminApi();
+  if (!gate.ok) return gate.response;
 
   const admin = createServiceClient();
   const { data: rows } = await admin
