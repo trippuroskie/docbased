@@ -135,7 +135,23 @@ export async function POST(request: Request) {
     userId: user.id,
     accessibleSpaceIds: scopedIds,
     spaceNameById: new Map(accessibleSpaces.map((s) => [s.id, s.name])),
+    spaces: accessibleSpaces.map((s) => ({
+      id: s.id,
+      name: s.name,
+      slug: s.slug,
+    })),
   };
+
+  // Tell the model which workspaces are in scope (name + slug), so it can pass a
+  // correct `space_id` to the tools — it never sees raw UUIDs otherwise, and
+  // would guess the name and get an empty scope.
+  const scopedSpaces = accessibleSpaces.filter((s) => scopedIds.includes(s.id));
+  const workspaceListContext =
+    scopedSpaces.length > 0
+      ? `Workspaces you can search (pass the name or slug as space_id, or omit it to search all):\n${scopedSpaces
+          .map((s) => `- ${s.name} (slug: ${s.slug})`)
+          .join("\n")}`
+      : "The user has no accessible workspaces.";
 
   // Resolve the "currently open" doc (chip in the chat footer) to title + path.
   // Only honor it when the doc lives in a space the user can access — never
@@ -183,6 +199,7 @@ export async function POST(request: Request) {
       // memory for follow-up references like "summarize each of those").
       const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
         { role: "system", content: SYSTEM_PROMPT },
+        { role: "system", content: workspaceListContext },
         ...(openDocContext
           ? [
               {

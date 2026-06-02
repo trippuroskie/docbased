@@ -14,6 +14,12 @@ export type ToolContext = {
   accessibleSpaceIds: string[];
   /** id -> name */
   spaceNameById: Map<string, string>;
+  /**
+   * Full metadata for the spaces in `accessibleSpaceIds`, used to resolve a
+   * model-supplied `space_id` that may be a name or slug rather than a UUID
+   * (the model never sees raw UUIDs — see resolveScope).
+   */
+  spaces: Array<{ id: string; name: string; slug: string }>;
 };
 
 export type ToolResult =
@@ -35,7 +41,7 @@ export const TOOL_SPECS: OpenAI.Chat.ChatCompletionTool[] = [
           space_id: {
             type: "string",
             description:
-              "Optional workspace UUID to restrict to. Omit to list across all accessible workspaces.",
+              "Optional workspace to restrict to — pass its name or slug (e.g. \"Ecomm\" or \"ecomm\") exactly as listed in the accessible-workspaces context. Omit to list across all accessible workspaces.",
           },
           status: {
             type: "string",
@@ -127,7 +133,7 @@ export const TOOL_SPECS: OpenAI.Chat.ChatCompletionTool[] = [
           space_id: {
             type: "string",
             description:
-              "Optional workspace UUID to restrict to. Omit to search all accessible workspaces.",
+              "Optional workspace to restrict to — pass its name or slug (e.g. \"Ecomm\" or \"ecomm\") exactly as listed in the accessible-workspaces context. Omit to search all accessible workspaces.",
           },
           limit: {
             type: "number",
@@ -143,12 +149,37 @@ export const TOOL_SPECS: OpenAI.Chat.ChatCompletionTool[] = [
 
 // ---------- Tool implementations ----------
 
-function clampSpace(
+/**
+ * Resolve a model-supplied `space_id` to a set of accessible space UUIDs.
+ *
+ * The model is given workspace *names* and *slugs* (never raw UUIDs), so it
+ * naturally passes e.g. "Ecomm" or "ecomm" as space_id. Match case-insensitively
+ * against UUID, slug, then name. An omitted scope means "all accessible". An
+ * unresolvable token returns an error listing valid workspaces — far better than
+ * silently returning an empty scope, which reads to the model as "nothing here".
+ */
+function resolveScope(
   requested: string | undefined,
-  accessible: string[],
-): string[] {
-  if (!requested) return accessible;
-  return accessible.includes(requested) ? [requested] : [];
+  ctx: ToolContext,
+): { ids: string[] } | { error: string } {
+  if (!requested) return { ids: ctx.accessibleSpaceIds };
+  const token = requested.trim().toLowerCase();
+  const match = ctx.spaces.find(
+    (s) =>
+      s.id.toLowerCase() === token ||
+      s.slug.toLowerCase() === token ||
+      s.name.toLowerCase() === token,
+  );
+  if (match && ctx.accessibleSpaceIds.includes(match.id)) {
+    return { ids: [match.id] };
+  }
+  const valid = ctx.spaces
+    .filter((s) => ctx.accessibleSpaceIds.includes(s.id))
+    .map((s) => s.name)
+    .join(", ");
+  return {
+    error: `Unknown or inaccessible workspace "${requested}". Valid workspaces: ${valid || "(none)"}. Omit space_id to search all accessible workspaces.`,
+  };
 }
 
 async function listDocuments(
@@ -160,9 +191,10 @@ async function listDocuments(
   },
   ctx: ToolContext,
 ): Promise<ToolResult> {
-  const scope = clampSpace(args.space_id, ctx.accessibleSpaceIds);
-  if (scope.length === 0) {
-    return { ok: true, data: { documents: [] }, summary: "No accessible workspaces in scope." };
+  const scope = resolveScope(args.space_id, ctx);
+  if ("error" in scope) return { ok: false, error: scope.error };
+  if (scope.ids.length === 0) {
+    return { ok: true, data: { documents: [] }, summary: "No accessible workspaces." };
   }
   const limit = Math.min(Math.max(args.limit ?? 50, 1), 100);
 
@@ -170,7 +202,7 @@ async function listDocuments(
   let q = admin
     .from("documents")
     .select("id, title, path, space_id, processing_status, tags, last_edited_at")
-    .in("space_id", scope)
+    .in("space_id", scope.ids)
     .is("deleted_at", null)
     .order("title")
     .limit(limit);
@@ -329,17 +361,20 @@ async function searchDocuments(
     headingPath: string[];
   }> | null;
 }> {
-  const scope = clampSpace(args.space_id, ctx.accessibleSpaceIds);
-  if (scope.length === 0) {
+  const scope = resolveScope(args.space_id, ctx);
+  if ("error" in scope) {
+    return { result: { ok: false, error: scope.error }, uiSources: null };
+  }
+  if (scope.ids.length === 0) {
     return {
-      result: { ok: true, data: { hits: [] }, summary: "No accessible workspaces in scope." },
+      result: { ok: true, data: { hits: [] }, summary: "No accessible workspaces." },
       uiSources: [],
     };
   }
   const limit = Math.min(Math.max(args.limit ?? 8, 1), 20);
 
   const hits = await semanticSearch(args.query, {
-    spaceIds: scope,
+    spaceIds: scope.ids,
     limit: 20,
     rerank: true,
   });
