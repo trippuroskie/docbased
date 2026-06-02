@@ -164,14 +164,18 @@ function resolveScope(
 ): { ids: string[] } | { error: string } {
   if (!requested) return { ids: ctx.accessibleSpaceIds };
   const token = requested.trim().toLowerCase();
-  const match = ctx.spaces.find(
+  // Names are not unique (only slug is), so collect every match and prefer one
+  // that's in the current scope — otherwise an earlier out-of-scope namesake
+  // would shadow a valid in-scope workspace and wrongly error.
+  const matches = ctx.spaces.filter(
     (s) =>
       s.id.toLowerCase() === token ||
       s.slug.toLowerCase() === token ||
       s.name.toLowerCase() === token,
   );
-  if (match && ctx.accessibleSpaceIds.includes(match.id)) {
-    return { ids: [match.id] };
+  const inScope = matches.find((s) => ctx.accessibleSpaceIds.includes(s.id));
+  if (inScope) {
+    return { ids: [inScope.id] };
   }
   const valid = ctx.spaces
     .filter((s) => ctx.accessibleSpaceIds.includes(s.id))
