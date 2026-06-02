@@ -145,7 +145,12 @@ export function AccessTokens({
             <p className="text-[11px] text-muted-foreground">
               Add to <code className="font-mono">claude_desktop_config.json</code>, replace the
               token, then fully restart Claude Desktop. In Claude Code instead run{" "}
-              <code className="font-mono">claude mcp add --transport http docbased {mcpUrl}</code>.
+              <code className="font-mono">
+                claude mcp add --transport http docbased {mcpUrl} --header
+                &quot;Authorization: Bearer dbk_your_token_here&quot;
+              </code>{" "}
+              — the <code className="font-mono">--header</code> flag is required; without it every
+              request is rejected with 401.
             </p>
             <div className="relative">
               <pre className="overflow-x-auto rounded bg-background p-2 text-[10px] font-mono leading-relaxed">
