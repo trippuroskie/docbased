@@ -54,7 +54,7 @@ export function InviteForm({ spaces }: { spaces: Array<{ id: string; name: strin
           required
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          placeholder="new.user@company.com"
+          placeholder="new.user@example.com"
         />
       </div>
       <div className="space-y-2">

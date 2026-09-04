@@ -27,6 +27,11 @@ if (!supabasePublishableKey) {
 
 const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 
+// Optional single canonical host (e.g. "www.example.com"). When set, page
+// requests to the bare apex are 308'd here by src/proxy.ts. Unset = no
+// canonicalization, which is the right default for local dev and previews.
+const canonicalHost = process.env.NEXT_PUBLIC_CANONICAL_HOST ?? null;
+
 // --- Server-only (never inlined into the browser; reading them in client
 // code returns undefined, which is what we want) ---
 
@@ -58,6 +63,7 @@ export const env = {
   monthlySpendCeiling,
   chatDailyLimit,
   appUrl,
+  canonicalHost,
 };
 
 // Allowlist of user-selectable chat models in the UI.

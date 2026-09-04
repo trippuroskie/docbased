@@ -8,7 +8,7 @@
 //
 // We deliberately skip the `npx`/`tsx` .cmd shims and invoke tsx's mjs entry
 // directly: shell-mode spawns on Windows mis-split paths containing spaces
-// (e.g. "OneDrive - Skullcandy"), and Node's post-CVE-2024-27980 restriction
+// (e.g. "OneDrive - Acme Corp"), and Node's post-CVE-2024-27980 restriction
 // requires shell mode to spawn .cmd at all.
 
 import { spawn } from "node:child_process";

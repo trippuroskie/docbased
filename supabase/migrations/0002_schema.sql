@@ -1,4 +1,4 @@
--- docbased schema. See docs/PROJECT_PLAN_v2.md §4.
+-- docbased schema. Source of truth for tables and indexes.
 
 create table if not exists users (
   id            uuid primary key references auth.users(id) on delete cascade,

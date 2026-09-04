@@ -1,15 +1,18 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { updateSession } from "@/lib/supabase/middleware";
+import { env } from "@/lib/env";
 
-// Host canonicalization. The apex (docbased.dev) is configured in Vercel to
-// SERVE the app — not platform-redirect to www — so that bearer-authed
-// endpoints work without a cross-origin hop. A redirect from apex→www is a
-// different origin, and fetch/undici strips the Authorization header (and
-// cookies) across it, which silently breaks the remote MCP at /mcp and any
-// other token/cookie auth. So we canonicalize *pages* to www here, but never
-// redirect /mcp or /api — those must reach the app on whichever host they hit.
-const APEX_HOST = "docbased.dev";
-const CANONICAL_HOST = "www.docbased.dev";
+// Optional host canonicalization, driven by NEXT_PUBLIC_CANONICAL_HOST
+// (e.g. "www.example.com"). Unset — the default — disables it entirely.
+//
+// When you do run a www canonical host, configure the apex to SERVE the app
+// rather than platform-redirect to www, and let this handle the redirect for
+// pages only. Reason: apex→www is a different origin, and fetch/undici strips
+// the Authorization header (and cookies) across that hop, which silently
+// breaks the remote MCP at /mcp and anything else using bearer or cookie auth.
+// So /mcp and /api must reach the app on whichever host they arrive at.
+const CANONICAL_HOST = env.canonicalHost;
+const APEX_HOST = CANONICAL_HOST?.replace(/^www\./, "") ?? null;
 
 function isAuthEndpoint(pathname: string): boolean {
   return (
@@ -21,7 +24,12 @@ function isAuthEndpoint(pathname: string): boolean {
 
 export async function proxy(request: NextRequest) {
   const host = request.headers.get("host");
-  if (host === APEX_HOST && !isAuthEndpoint(request.nextUrl.pathname)) {
+  if (
+    CANONICAL_HOST &&
+    APEX_HOST !== CANONICAL_HOST &&
+    host === APEX_HOST &&
+    !isAuthEndpoint(request.nextUrl.pathname)
+  ) {
     const url = request.nextUrl.clone();
     url.hostname = CANONICAL_HOST;
     return NextResponse.redirect(url, 308);

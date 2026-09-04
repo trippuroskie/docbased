@@ -10,7 +10,7 @@
 //   npm run upload-obsidian -- \
 //     --note "/path/to/vault/Notes/Power BI - Semantic Model.md" \
 //     --space it \
-//     [--as tripp.uroskie@skullcandy.com] \
+//     [--as you@example.com] \
 //     [--folder Notes/Power BI] \
 //     [--tags powerbi,semantic-model] \
 //     [--conflict replace|skip|version] \
