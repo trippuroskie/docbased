@@ -1,6 +1,8 @@
 {
   "name": "docbased",
   "version": "0.1.0",
+  "description": "Self-hosted documentation search and RAG chat over multiple knowledge spaces, with per-user access control.",
+  "license": "MIT",
   "private": true,
   "workspaces": [
     "packages/*"
@@ -12,10 +14,12 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "postinstall": "fumadocs-mdx",
     "db:migrate": "tsx scripts/apply-migrations.ts",
     "db:generate": "drizzle-kit generate",
     "db:studio": "drizzle-kit studio",
     "seed": "tsx scripts/seed.ts",
+    "seed:demo": "tsx scripts/seed-demo.ts",
     "loginlink": "tsx scripts/loginlink.ts",
     "setpassword": "tsx scripts/setpassword.ts",
     "backup": "tsx scripts/backup.ts",

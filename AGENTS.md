@@ -8,7 +8,7 @@ The most likely traps in Next.js 16 for this repo: `middleware.ts` is now [`prox
 
 ## What this app is
 
-docbased — internal docs search + RAG chat for multiple "spaces" (IT, Ecomm, personal notes) with per-user role-based access. Operational runbook is in [README.md](README.md); product spec in [docs/PROJECT_PLAN_v2.md](docs/PROJECT_PLAN_v2.md).
+docbased — documentation search + RAG chat over multiple "spaces" with per-user role-based access. Setup, operations, and known issues are in [README.md](README.md).
 
 ## Stack
 
@@ -41,7 +41,7 @@ src/
   proxy.ts        Next 16 "middleware" — refreshes Supabase session cookies
 supabase/migrations/  SQL — schema, RLS, hybrid_search, storage policies
 scripts/              apply-migrations, seed, backup, loginlink, setpassword, upload-obsidian
-docs/                 PROJECT_PLAN_v2 and UI reference
+docs/screenshots/     README screenshots + the shot list for regenerating them
 ```
 
 ## Commands

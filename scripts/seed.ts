@@ -35,7 +35,7 @@ async function main() {
   const spaces = [
     { slug: "it", name: "IT", description: "IT operations, runbooks, and infrastructure docs." },
     { slug: "ecomm", name: "Ecomm", description: "Ecommerce playbooks, analytics, and Shopify docs." },
-    { slug: "notes", name: "Tripp's Notes", description: "Personal capture space." },
+    { slug: "notes", name: "Notes", description: "Personal capture space." },
   ];
 
   for (const s of spaces) {
